@@ -15,7 +15,7 @@
 ## 当前进度
 
 - [x] M0 阶段 0：一页纸 + 仓库骨架
-- [ ] M1 假数据跑通 loop
+- [ ] M1 假数据跑通 loop ← **当前**：靶子已立（4 个场景全红），`loop.py` 待写
 - [ ] M2 接真模型（OpenAI 兼容 / DeepSeek）+ 真实任务
 - [ ] M3 graph 引擎跑同一任务
 - [ ] M4 《loop vs graph》对比 + 面试讲稿
@@ -32,6 +32,14 @@ uv run pytest
 ## 目录
 
 ```text
-src/kama_engine/   引擎源码（M1 起开始填）
-tests/             测试（假 LLM + 假工具，不需要 API key）
+src/kama_engine/
+  types.py   词汇表：Message / ToolCall / ToolResult / LLMResponse / RunResult
+  llm.py     模型层边界：一个 chat() 签名（Protocol），可换假模型
+  tools.py   工具层边界：ToolRegistry.invoke() 永不抛异常
+  loop.py    循环体（M1 主战场）
+tests/
+  fakes.py       假 LLM + 假工具，不需要 API key
+  test_loop.py   M1 四场景
+docs/
+  M1-任务书.md
 ```
