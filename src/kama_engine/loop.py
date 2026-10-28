@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from kama_engine.llm import LLMProvider
 from kama_engine.tools import ToolRegistry
-from kama_engine.types import RunResult
+from kama_engine.types import Message, RunResult
 
 
 class AgentLoop:
@@ -29,6 +29,8 @@ class AgentLoop:
     """
 
     def __init__(self, provider: LLMProvider, tools: ToolRegistry, *, max_steps: int = 8) -> None:
+        if max_steps < 1:
+            raise ValueError("max_steps 必须至少为 1")
         self.provider = provider
         self.tools = tools
         self.max_steps = max_steps
@@ -44,5 +46,55 @@ class AgentLoop:
              stop_reason="max_steps"，模型调用次数绝不超过 max_steps
           D. 模型抛异常 → 不往上冒，status="failed"，stop_reason="error"，
              error 里带上异常信息，已积累的 messages 保留
+
+        Q&A&sum:
+            一个完整的数据模型包括：模型返回结果，用户传入的信息，工具返回结果
+
         """
-        raise NotImplementedError("M1：循环体在这里。")
+        messages = [Message(role="user", content=prompt)]
+
+        for step in range(1, self.max_steps + 1):
+            try:
+                response = self.provider.chat(list(messages), self.tools.specs())
+            except Exception as exc:
+                return RunResult(
+                    status="failed",
+                    stop_reason="error",
+                    final_text="",  # 没拿到回复，自然没有最终文本
+                    messages=tuple(messages),
+                    steps=step,
+                    error=f"{type(exc).__name__}:{exc}",
+                )
+
+            # 先记录模型的请求，再记录工具的结果，保证结果有对应得到请求，先请求后结果的原因是因为
+            messages.append(response.message)
+
+            if response.stop_reason == "end_turn":
+                return RunResult(
+                    status="ok",
+                    stop_reason="end_turn",
+                    final_text=response.message.content,
+                    messages=tuple(messages),
+                    steps=step,
+                    error=None,
+                )
+            # 工具失败也会返回 ToolResult，这里不需要额外的 try/except
+            for call in response.message.tool_calls:
+                result = self.tools.invoke(call)
+                messages.append(
+                    Message(
+                        role="tool",
+                        content=result.content,
+                        tool_call_id=result.tool_call_id,
+                        name=call.name,
+                    )
+                )
+        # 最后一轮的工具仍会执行，但不会再发起超出预算的模型调用
+        return RunResult(
+            status="failed",
+            stop_reason="max_steps",
+            final_text="",
+            messages=tuple(messages),
+            steps=self.max_steps,
+            error=None,
+        )

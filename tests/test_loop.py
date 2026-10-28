@@ -6,7 +6,8 @@
 跑法：`uv run pytest tests/test_loop.py -v`
 """
 
-from fakes import AddTool, ScriptedProvider, assistant_text, assistant_tool_calls
+import pytest
+from fakes import AddTool, BoomTool, ScriptedProvider, assistant_text, assistant_tool_calls
 
 from kama_engine.loop import AgentLoop
 from kama_engine.tools import ToolRegistry
@@ -120,3 +121,37 @@ def test_d_provider_exception_is_captured() -> None:
     # 已经产生的消息不能丢 —— 出问题时 messages 就是唯一的现场
     assert [m.role for m in result.messages] == ["user"]
     assert len(provider.calls) == 1
+
+
+# ---------------------------------------------------------------- 场景 E
+def test_e_tool_failure_is_fed_back_and_loop_survives() -> None:
+    """工具炸了：循环不能死，而且模型必须能看见这件事。
+
+    这条是 tools.py 存在的理由 —— 失败被翻译成一条 tool 消息，
+    而不是一个向上冒的异常。
+    """
+    provider = ScriptedProvider(
+        [
+            assistant_tool_calls(ToolCall(id="call_1", name="boom", arguments={})),
+            assistant_text("工具挂了，我换个办法。"),
+        ]
+    )
+    loop = AgentLoop(provider, ToolRegistry([AddTool(), BoomTool()]), max_steps=5)
+
+    result = loop.run("试试那个会炸的工具")
+
+    assert result.status == "ok"  # 循环活着走完了
+    assert result.steps == 2
+    failure_message = result.messages[2]
+    assert failure_message.role == "tool"
+    assert failure_message.tool_call_id == "call_1"
+    assert "工具内部炸了" in failure_message.content
+
+
+# ---------------------------------------------------------------- 构造器护栏
+def test_max_steps_must_be_positive() -> None:
+    """自己立的不变量也要有测试，不然就是没验证过的分支。"""
+    provider = ScriptedProvider([])
+
+    with pytest.raises(ValueError):
+        AgentLoop(provider, ToolRegistry([AddTool()]), max_steps=0)
