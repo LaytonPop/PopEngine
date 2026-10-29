@@ -1,0 +1,32 @@
+{
+  "id": "0a6c4e5b-9a7d-4ba1-be39-ec3e5a9552d8",
+  "object": "chat.completion",
+  "created": 1793281058,
+  "model": "deepseek-flash",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "收到了",
+        "reasoning_content": "我们需要回答用户：“只回三个字：收到了”。需要只回三个字：收到了。注意是三个字。最终只输出“收到了”。"
+      },
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 36,
+    "completion_tokens": 32,
+    "total_tokens": 68,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 30
+    },
+    "prompt_cache_hit_tokens": 0,
+    "prompt_cache_miss_tokens": 36
+  },
+  "system_fingerprint": "bc19ba97cbe016479903222bb1578db6"
+}

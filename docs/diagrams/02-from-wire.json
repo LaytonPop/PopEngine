@@ -1,0 +1,71 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "from_wire：入境的五道关卡",
+    "locale": "zh-CN",
+    "subtitle": "真实响应进来之后，每一步都可能出错，每一步都不许抛",
+    "output": "docs/diagrams/02-from-wire.html",
+    "quality_profile": "showcase"
+  },
+  "lanes": [
+    { "id": "wire", "label": "线上格式 · JSON" },
+    { "id": "guard", "label": "from_wire 入境五关" },
+    { "id": "ours", "label": "我们的类型" },
+    { "id": "fail", "label": "兜底路径 · 不许抛", "variant": "exception" }
+  ],
+  "phases": [
+    { "id": "decode", "label": "取出", "fromCol": 0, "toCol": 1 },
+    { "id": "normalize", "label": "归一", "fromCol": 2, "toCol": 4, "variant": "emphasis" },
+    { "id": "handoff", "label": "交给 loop", "fromCol": 5, "toCol": 5, "variant": "dashed" }
+  ],
+  "mainPath": ["resp", "pick", "stop", "content", "args", "llmresp"],
+  "nodes": [
+    { "id": "resp", "lane": "wire", "col": 0, "type": "external", "label": "HTTP 200 响应", "sublabel": "7 个顶层键", "width": 132 },
+    { "id": "pick", "lane": "guard", "col": 1, "type": "backend", "label": "取 choices[0]", "sublabel": "拿 message", "tag": "只认第一个", "width": 146 },
+    { "id": "stop", "lane": "guard", "col": 2, "type": "backend", "label": "finish_reason 归一", "sublabel": "6 值 → 3 值", "width": 160 },
+    { "id": "content", "lane": "guard", "col": 3, "type": "backend", "label": "content 归一", "sublabel": "null → 空串", "width": 146 },
+    { "id": "args", "lane": "guard", "col": 4, "type": "backend", "label": "arguments 解码", "sublabel": "str → dict", "tag": "坏 JSON 走兜底", "width": 150 },
+    { "id": "llmresp", "lane": "ours", "col": 5, "type": "backend", "label": "LLMResponse", "sublabel": "message + stop_reason", "width": 132 },
+    { "id": "toolres", "lane": "fail", "col": 4, "type": "security", "label": "包成 ToolResult", "sublabel": "is_error=True", "width": 148 },
+    { "id": "check", "lane": "fail", "col": 5, "type": "backend", "label": "loop 执行工具前", "sublabel": "raw_arguments 非空", "width": 138 }
+  ],
+  "edges": [
+    { "id": "e-resp-pick", "from": "resp", "to": "pick", "label": "200 OK", "variant": "default" },
+    { "id": "e-pick-stop", "from": "pick", "to": "stop", "variant": "default" },
+    { "id": "e-stop-content", "from": "stop", "to": "content", "variant": "default" },
+    { "id": "e-content-args", "from": "content", "to": "args", "variant": "default" },
+    { "id": "e-args-resp", "from": "args", "to": "llmresp", "label": "解析成功", "variant": "emphasis" },
+    { "id": "e-args-fail", "from": "args", "to": "toolres", "label": "JSON 坏 / 截断 / 中文引号", "variant": "security", "role": "error" },
+    { "id": "e-fail-check", "from": "toolres", "to": "check", "label": "交给 loop 自己走", "variant": "dashed", "role": "branch" }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "为什么一关都不许抛",
+      "items": [
+        "解析失败不是程序 bug，是模型给的输入质量差",
+        "模型自己能修的错误，不该变成 Python 异常",
+        "兜底不是吞掉：原文要原样回给模型，它下一轮能改"
+      ]
+    },
+    {
+      "dot": "orange",
+      "title": "content 的真相",
+      "items": [
+        "带 tool_calls 时 content 也可能有文本（实测是「我先读一下这个文件。」）",
+        "所以不能「有 tool_calls 就把 content 丢掉」",
+        "null 和空串都要能收：两种都归一成空串"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "陌生字段只白名单取键",
+      "items": [
+        "reasoning_content、index、logprobs、usage 全部忽略",
+        "绝不写 Message(**msg)：协议比你大，它会加字段",
+        "protocol 是别人的，我们的解析必须容得下它长大"
+      ]
+    }
+  ]
+}

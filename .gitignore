@@ -19,3 +19,6 @@ runs/
 
 # editor / workspace
 *.code-workspace
+
+# archify 自检产物（随时可重跑，不入库）
+docs/diagrams/*.visual-check.*

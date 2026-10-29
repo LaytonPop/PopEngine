@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "一次真实 run：数据两次穿过边界",
+    "locale": "zh-CN",
+    "output": "docs/diagrams/01-run-sequence.html",
+    "quality_profile": "showcase",
+    "viewBox": [720, 700]
+  },
+  "participants": [
+    { "id": "tools", "type": "backend", "label": "工具层", "sublabel": "read_file 真正执行" },
+    { "id": "loop", "type": "backend", "label": "loop.run", "sublabel": "唯一状态是 messages" },
+    { "id": "convert", "type": "backend", "label": "openai_compat", "sublabel": "纯函数 · 不碰网络" },
+    { "id": "llm", "type": "cloud", "label": "DeepSeek", "sublabel": "deepseek-flash" }
+  ],
+  "segments": [
+    { "from": 150, "to": 336, "label": "① 出境" },
+    { "from": 340, "to": 466, "label": "② 工具回环" },
+    { "from": 470, "to": 600, "label": "③ 收尾" }
+  ],
+  "messages": [
+    { "id": "m1", "from": "loop", "to": "convert", "y": 185, "label": "messages 内部类型", "variant": "default" },
+    { "id": "m2", "from": "convert", "to": "llm", "y": 228, "label": "POST payload JSON", "variant": "emphasis" },
+    { "id": "m3", "from": "llm", "to": "convert", "y": 271, "label": "finish_reason: tool_calls", "variant": "return" },
+    { "id": "m4", "from": "convert", "to": "loop", "y": 314, "label": "stop_reason: tool_use", "variant": "return" },
+    { "id": "m5", "from": "loop", "to": "tools", "y": 357, "label": "invoke(ToolCall)", "variant": "emphasis" },
+    { "id": "m6", "from": "tools", "to": "loop", "y": 398, "label": "ToolResult ok", "variant": "return" },
+    { "id": "m7", "from": "loop", "to": "convert", "y": 441, "label": "追加 role=tool 消息", "variant": "default" },
+    { "id": "m8", "from": "convert", "to": "llm", "y": 484, "label": "第二轮 · 省略 name", "variant": "emphasis" },
+    { "id": "m9", "from": "llm", "to": "convert", "y": 527, "label": "finish_reason: stop", "variant": "return" },
+    { "id": "m10", "from": "convert", "to": "loop", "y": 570, "label": "final_text · end_turn", "variant": "return" }
+  ],
+  "activations": [
+    { "participant": "loop", "from": 180, "to": 578, "type": "backend" },
+    { "participant": "convert", "from": 180, "to": 322, "type": "backend" },
+    { "participant": "convert", "from": 436, "to": 578, "type": "backend" },
+    { "participant": "tools", "from": 352, "to": 404, "type": "backend" },
+    { "participant": "llm", "from": 224, "to": 318, "type": "cloud" },
+    { "participant": "llm", "from": 480, "to": 574, "type": "cloud" }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "只有两次穿越",
+      "items": [
+        "变形只发生在竖线边界上，中间都是原样搬运",
+        "loop 从没看见 finish_reason 这个词",
+        "所以 loop 的测试不需要 mock HTTP"
+      ]
+    },
+    {
+      "dot": "orange",
+      "title": "四个真变形点",
+      "items": [
+        "补齐 {type, function} 这层包装",
+        "arguments：dict 出去，JSON 字符串回来",
+        "content：null 归一成空串，有文本要留着",
+        "finish_reason 六个值收成三种"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "回程随手要丢的",
+      "items": [
+        "reasoning_content 是模型草稿，不入链",
+        "tool_calls[].index、choices[0].logprobs 用不上",
+        "丢的前提是不因它们崩：只白名单取键"
+      ]
+    }
+  ]
+}
