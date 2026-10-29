@@ -13,9 +13,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-# 模型说"这一轮我结束了"
-# 注意：这是模型层的词汇，只有两种值 —— 模型要么说完，要么要工具。
-LLMStopReason = Literal["end_turn", "tool_use"]
+# 这一轮模型为什么停下 —— 模型层的词汇。
+# 绝大多数情况只有两种值：说完了，或者要工具。
+# 但协议给的 finish_reason 比这多得多：length（被截断）、content_filter（被拦了）、
+# 各家私有的 insufficient_system_resource……这些值不能装作是 end_turn ——
+# 被截断的答案和答完的答案，在日志里长得一模一样，这是最容易静默出错的地方。
+# 所以留一个 unknown：内部类型不比协议更穷，丢信息要显式暴露，不能靠兜底遮住。
+LLMStopReason = Literal["end_turn", "tool_use", "unknown"]
 
 # 一次 run 停下来的原因（loop 层的词汇）。
 # "tool_use" 不在里面：模型要工具不是终点，是继续跑的理由。
@@ -35,6 +39,12 @@ class ToolCall:
     id: str
     name: str
     arguments: dict[str, Any]
+    # arguments 是"模型生成的 JSON 文本"解析出来的结果 —— 解析可能失败。
+    # 失败时 arguments 退化成 {}，原始串留在这里不丢。
+    # 为什么不在这里就报错：转换层手里没有 ToolResult（那是执行工具之后才有的东西），
+    # 它造不出错误该去的容器。所以它只负责把"解析不了"原样带下去，
+    # 由 loop 变成 ToolResult(is_error=True) 还给模型，让它自己修参数。
+    raw_arguments: str | None = None
 
 
 @dataclass(frozen=True)
