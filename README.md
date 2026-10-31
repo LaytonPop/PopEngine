@@ -17,8 +17,12 @@
 - [x] M0 阶段 0：一页纸 + 仓库骨架
 - [x] M1 假数据跑通 loop（2026-10-27：11 个测试全绿）
 - [ ] M2 接真模型（OpenAI 兼容 / DeepSeek）+ 真实任务 ← **当前**
+  - [x] 转换层 `openai_compat.py`（2026-10-29：18 个测试全绿）
+  - [ ] 接线真跑 · 真工具 · events.jsonl
 - [ ] M3 graph 引擎跑同一任务
 - [ ] M4 《loop vs graph》对比 + 面试讲稿
+
+**待办清单（唯一入口）：[`docs/TODO.md`](docs/TODO.md)** ← 每次开工先看这个
 
 阶段 0 一页纸：`D:\workSpace\Pop\github\kamacode\面试项目\02-阶段0-一页纸.md`
 
@@ -33,13 +37,19 @@ uv run pytest
 
 ```text
 src/kama_engine/
-  types.py   词汇表：Message / ToolCall / ToolResult / LLMResponse / RunResult
-  llm.py     模型层边界：一个 chat() 签名（Protocol），可换假模型
-  tools.py   工具层边界：ToolRegistry.invoke() 永不抛异常
-  loop.py    循环体（M1 主战场）
+  types.py            词汇表：Message / ToolCall / ToolResult / LLMResponse / RunResult
+  llm.py              模型层边界：一个 chat() 签名（Protocol），可换假模型
+  tools.py            工具层边界：ToolRegistry.invoke() 永不抛异常
+  loop.py             循环体（M1 主战场）
+  openai_compat.py    转换层：内部类型 ⇄ OpenAI wire 格式（纯函数，不碰网络）
 tests/
-  fakes.py       假 LLM + 假工具，不需要 API key
-  test_loop.py   M1 四场景
+  fakes.py            假 LLM + 假工具，不需要 API key
+  test_loop.py        M1 四场景
+  test_openai_compat.py
 docs/
-  M1-任务书.md
+  TODO.md             ★ 唯一待办清单
+  M2-任务书.md         M2 怎么切、检查点、会踩的坑
+  openai映射表.md      协议逐行对照 + 真实响应实测记录
+  diagrams/           两张图 + 四组真数据对照
+  archive/            作废的计划，不要照做
 ```
