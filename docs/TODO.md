@@ -11,7 +11,7 @@
 | M0 骨架                           | ✅           |
 | M1 假数据 loop（4 场景）          | ✅           |
 | M2 真模型 · 转换层               | ✅ 18 passed |
-| M2 真模型 · 接线 + 真工具 + 事件 | 🚧 未开工    |
+| M2 真模型 · 接线 + 真工具 + 事件 | 🚧 第 1 段已通 |
 | M3 graph 引擎跑同一任务 + 对比    | ⬜           |
 | M4 README + 面试讲稿              | ⬜           |
 
@@ -21,13 +21,13 @@
 
 ### 0. 开工前置（5 分钟，必须先做）
 
-- [x] **定真实任务** → 已落盘 `docs/M2-真实任务.md`（2026-11-04，三条验收断言可进测试）
+- [X] **定真实任务** → 已落盘 `docs/M2-真实任务.md`（2026-11-04，三条验收断言可进测试）
 
 ### 1. 接线 + 场景 A 真跑（约 60 分钟）
 
-- [ ] `src/kama_engine/llm/provider.py`：实现 `OpenAIProvider.chat()`（urllib，不引 SDK）
-- [ ] `scripts/hello_llm.py`：一句输入 → 打印 `RunResult`
-- [ ] 真跑一次 → 验收：真实输出 + `stop_reason: end_turn`
+- [X] `src/kama_engine/llm/provider.py`：实现 `OpenAIProvider.chat()`（urllib，不引 SDK）
+- [X] `scripts/hello_llm.py`：一句输入 → 打印 `RunResult`
+- [X] 真跑一次 → 验收：真实输出 + `stop_reason: end_turn`（2026-11-04 通过：`steps=1`，真模型输出；负向也验了：错 key → 401 带完整响应体）
 - [ ] （可选，真跑前补最划算）`to_wire_tools` 的测试 —— 三条出境路径里唯一裸奔的
 
 ### 2. 真工具 + 场景 B 真跑（约 60 分钟）

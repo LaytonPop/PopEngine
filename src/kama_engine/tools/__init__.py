@@ -46,6 +46,15 @@ class ToolRegistry:
 
     def invoke(self, call: ToolCall) -> ToolResult:
         """执行一次工具调用。**任何情况下都返回 ToolResult，不抛异常。**"""
+        # 参数解析失败时 from_wire 会把原文留在 raw_arguments 里。
+        # 这时 arguments 是 {}，直接执行只会得到"缺少参数"这种误导性错误；
+        # 把原文还给模型，它才知道要修的是 JSON 本身。
+        if call.raw_arguments is not None:
+            return ToolResult(
+                tool_call_id=call.id,
+                content=f"参数不是合法的 JSON 对象：{call.raw_arguments}",
+                is_error=True,
+            )
         tool = self._by_name.get(call.name)
         if tool is None:
             return ToolResult(
