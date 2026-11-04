@@ -193,6 +193,25 @@ def from_wire(data: dict) -> LLMResponse:
     else:
         stop_reason = "unknown"
 
+    # HOW 8：stop_reason 和 tool_calls 来自同一个响应，对不上就是协议自相矛盾。
+    # 现实里两种坏法：
+    #   a) finish_reason="tool_calls" 但 tool_calls 为空 —— loop 以为还有工具要调，
+    #      空转到 max_steps，error=None，一条人话都没有（M2-待办.md 第 1 条）。
+    #   b) 带了 tool_calls 但 finish_reason 是 stop —— loop 当它答完了直接收工，
+    #      调用被静默丢掉，模型永远等不到结果。
+    # 为什么在这里抛、不往 loop 里塞 if：这两样都产自同一个 response，
+    # 对不上说明是适配层或网关写错了，属于"转换层不该产出非法对象"。
+    # 抛出去正好落进 loop 既有的失败路径（有 error、有 events），预算不会被烧完。
+    if stop_reason == "tool_use" and not calls:
+        raise ValueError(
+            "finish_reason=tool_calls 但 tool_calls 为空：stop_reason 与调用列表自相矛盾"
+        )
+    if calls and stop_reason != "tool_use":
+        raise ValueError(
+            f"带了 {len(calls)} 个 tool_calls，finish_reason 却是 {finish_reason!r}："
+            "这种响应会让 loop 以为已经答完，把调用静默丢掉"
+        )
+
     # HOW 7：先用转换好的零件组装 Message，再组装 LLMResponse。
     # tuple 只改变容器；calls 中的元素已经在前面转换成 ToolCall。
     message = Message(

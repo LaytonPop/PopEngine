@@ -148,3 +148,21 @@
 4. `usage` 会花真钱：那次带工具的调用 `prompt_tokens: 317` / `completion_tokens: 44`（工具定义占了 317 里的大头）
 
 **一句话教训**：我能写出来的「OpenAI 响应长什么样」只是记忆，真响应才是证据。**fixture 比文档可靠**。
+
+## 七、`stop_reason` 与 `tool_calls` 必须等价（2026-11-04 补）
+
+这是 `M2-待办.md` 第 1 条的落地，一句话规则：
+
+> **`stop_reason == "tool_use"` 当且仅当 `len(tool_calls) > 0`。** 任何违反这个等价的响应都不许进 loop。
+
+两种违反的样子，后果完全不同：
+
+| 坏法 | 放行会怎样 | 现在 |
+|---|---|---|
+| `finish_reason: tool_calls` 但 `tool_calls` 为空 | loop 以为还有工具要调 → 空转到 `max_steps`，`error=None`，现场只有几条一模一样的空 assistant 消息；M2 之后每条都是真钱 | 抛 `ValueError` |
+| 带着 `tool_calls` 但 `finish_reason` 是 `stop` | loop 看到 `end_turn` 直接收工，调用既没执行也没报错，模型永远等不到结果，日志里一切正常 | 抛 `ValueError` |
+
+**为什么把 `if` 放在转换层、不放 loop**：这两样东西产自同一个 response，对不上说明是适配层或网关写错了，属于「转换层不该产出非法对象」。放在这里，它自动落进 loop 既有的失败路径（有 `error`、有 `events`），预算不会被烧完；放进 loop 就等于让 loop 用 `if` 去怀疑自己的输入，怀疑一次就得怀疑一辈子。
+
+**一处刻意从严**：`finish_reason: "length"` 且带调用（模型写参数写到一半被截断）现在也会抛。理由是截断的调用参数大概率是坏的，执行一个半截动作可能比失败更危险。要放宽的话，改动点就是 `from_wire` 里那两行，且必须同时补一条「截断后能自愈」的测试——不要悄悄放宽。
+
