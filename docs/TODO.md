@@ -32,10 +32,11 @@
 
 ### 2. 真工具 + 场景 B 真跑（约 60 分钟）
 
-- [ ] `src/kama_engine/tools/builtin.py`：`list_dir` / `read_file`
+- [X] `src/kama_engine/tools/builtin.py`：`list_dir` / `read_file`
   （锁根目录、越界返 `is_error=True`、截断要明说、参数写 JSON Schema）
-- [ ] 真跑 → 验收：trace 里两轮工具往返，且是模型自己决定先 list 再 read
-- [ ] `stop_reason` 与 `tool_calls` 一致性校验（`M2-待办.md` 第 1 条，**接工具后第一件**）
+- [X] `scripts/run_task.py`：第 2 段验收脚本（抠 JSON → 验五键类型 → 验 trace 有 `list_dir` → 顺手做 `tool_call_id` 配对自检）
+- [X] 真跑 → 验收：trace 里两轮工具往返，且是模型自己决定先 list 再 read（2026-11-04：本项目 6 步 11 次调用、ChatBox 7 步 17 次调用，两个仓库都 PASS）
+- [ ] `stop_reason` 与 `tool_calls` 一致性校验（`M2-待办.md` 第 1 条，**接工具后第一件**；注意 `run_task.py` 只做了 id 配对，没做 stop_reason 一致性）
 
 ### 3. 事件 + 失败记录（约 45 分钟）
 
