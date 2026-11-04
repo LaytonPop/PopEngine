@@ -8,6 +8,12 @@
     - 不重试、不降级、不做超时策略（M1 明确不做）
     - 不拼 prompt、不管上下文裁剪
     - 不管"该不该停下" —— 停不停是 loop 的判断
+
+AI 改（2026-11-04）：本文件从 llm.py 挪成了包 `llm/` 的 __init__.py。
+    原因：同一目录下 `llm.py` 和 `llm/` 不能共存（实测 package 赢，llm.py 被静默忽略）。
+    规则一句话：**一个模块一旦要有实现文件住在它下面，它就变成包**。
+    好处：`from kama_engine.llm import LLMProvider` 这条老路径一个字都没变，
+    而实现（HTTP 那层）住在同目录的 provider.py —— 边界和实现终于在同一层。
 """
 
 from __future__ import annotations

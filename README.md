@@ -38,8 +38,12 @@ uv run pytest
 ```text
 src/kama_engine/
   types.py            词汇表：Message / ToolCall / ToolResult / LLMResponse / RunResult
-  llm.py              模型层边界：一个 chat() 签名（Protocol），可换假模型
-  tools.py            工具层边界：ToolRegistry.invoke() 永不抛异常
+  llm/                模型层（包）
+    __init__.py       边界：一个 chat() 签名（Protocol），可换假模型
+    provider.py       真实现：OpenAI 兼容 HTTP（M2 作业）
+  tools/              工具层（包）
+    __init__.py       边界：ToolRegistry.invoke() 永不抛异常
+    builtin.py        真工具：list_dir / read_file（M2）
   loop.py             循环体（M1 主战场）
   openai_compat.py    转换层：内部类型 ⇄ OpenAI wire 格式（纯函数，不碰网络）
 tests/

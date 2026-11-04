@@ -7,6 +7,10 @@
       - loop 里没有任何 try/except 处理工具
       - 模型能看见失败原因（"未知工具：foo" / "TimeoutError: ..."）
     这是"边界处收口"的典型用法。
+
+AI 改（2026-11-04）：本文件从 tools.py 挪成了包 `tools/` 的 __init__.py。
+    和 llm 同一个原因：`tools.py` 与 `tools/` 不能共存，而真工具要住在
+    tools/builtin.py。`from kama_engine.tools import ToolRegistry` 的路径没变。
 """
 
 from __future__ import annotations
