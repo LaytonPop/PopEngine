@@ -12,6 +12,9 @@ venv/
 # runtime artifacts
 runs/
 
+# 草稿 / 临时产物（讨论稿、中间稿，随时可删）
+.tmp/
+
 # secrets
 .env
 .env.*
