@@ -95,8 +95,12 @@ class ToolSpec:
 class LLMResponse:
     """模型一次调用的返回。
 
+    旧版本(已经改变)
     message 一定是 assistant 消息；stop_reason 由模型给，缺省时由 provider 兜底成
     "end_turn"（这一条是从 KamaClaude S1 学来的已知简化，后面要讲清它的风险）。
+    新版本:
+    message 一定是 assistant 消息；stop_reason 由模型给，认不出的 finish_reason
+    一律落到 "unknown"，刻意不兜成 "end_turn"（映射表 §二 · 6 策略 B）。
     """
 
     message: Message

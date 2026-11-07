@@ -53,9 +53,14 @@ class AgentLoop:
         """
         messages = [Message(role="user", content=prompt)]
 
+        # 工具在一次 run 里不变，说明书只算一次。
+        # 提到循环外不只是省几个列表推导 —— 它同时钉死了一件事：
+        # 同一轮 run 里，模型每次看到的说明书必须一模一样。
+        tool_specs = self.tools.specs()
+
         for step in range(1, self.max_steps + 1):
             try:
-                response = self.provider.chat(list(messages), self.tools.specs())
+                response = self.provider.chat(list(messages), tool_specs)
             except Exception as exc:
                 return RunResult(
                     status="failed",
@@ -77,6 +82,17 @@ class AgentLoop:
                     messages=tuple(messages),
                     steps=step,
                     error=None,
+                )
+
+            #
+            if response.stop_reason == "unknown":
+                return RunResult(
+                    status="failed",
+                    stop_reason="error",
+                    final_text="",
+                    messages=tuple(messages),
+                    steps=step,
+                    error=f"模型以未建模的原因停下（stop_reason=unknown），第 {step} 步中止",
                 )
             # 工具失败也会返回 ToolResult，这里不需要额外的 try/except
             for call in response.message.tool_calls:

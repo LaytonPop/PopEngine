@@ -11,7 +11,7 @@ from fakes import AddTool, BoomTool, ScriptedProvider, assistant_text, assistant
 
 from kama_engine.loop import AgentLoop
 from kama_engine.tools import ToolRegistry
-from kama_engine.types import ToolCall
+from kama_engine.types import LLMResponse, Message, ToolCall
 
 
 def _loop(provider: ScriptedProvider, max_steps: int = 5) -> AgentLoop:
@@ -155,3 +155,33 @@ def test_max_steps_must_be_positive() -> None:
 
     with pytest.raises(ValueError):
         AgentLoop(provider, ToolRegistry([AddTool()]), max_steps=0)
+
+
+# ---------------------------------------------------------------- 场景 F
+def test_f_unknown_stop_reason_stops_immediately() -> None:
+    """unknown 必须当场收场，不许掉进工具分支空转到 max_steps。
+
+    unknown 是「模型合法地以我们没建模的原因停下」（length 被截断 /
+    content_filter 被拦）。这种响应的 tool_calls 一定是空的，所以它会
+    悄悄穿过工具分支，一圈一圈把预算烧完，error 还是 None —— 2026-11-06
+    复核实测：steps=8、模型调用 8 次、error=None。
+
+    steps == 1 是这条测试的灵魂：ScriptedProvider 剧本里只有一条，loop
+    若还想跑第二圈就会抛 AssertionError，被 loop 的 except 接住，steps 变 2。
+    """
+    provider = ScriptedProvider(
+        [
+            LLMResponse(
+                message=Message(role="assistant", content=""),
+                stop_reason="unknown",
+            )
+        ]
+    )
+    loop = AgentLoop(provider, ToolRegistry([AddTool()]), max_steps=8)
+
+    result = loop.run("随便问点什么")
+
+    assert result.status == "failed"
+    assert result.stop_reason == "error"
+    assert result.steps == 1
+    assert "unknown" in (result.error or "")

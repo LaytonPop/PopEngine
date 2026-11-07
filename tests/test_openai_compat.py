@@ -209,3 +209,47 @@ def test_to_wire_tools_keeps_parameters_as_dict() -> None:
 def test_to_wire_tools_empty_list_stays_empty_list() -> None:
     """没有工具时给空列表，不给 None —— None 在协议里是「这个字段不存在」。"""
     assert to_wire_tools([]) == []
+
+
+def test_to_wire_tools_keeps_two_specs_in_order() -> None:
+    """ """
+    first = ToolSpec(
+        name="read_file",
+        description="读一个文本文件",
+        parameters={"type": "object", "properties": {"path": {"type": "string"}}},
+    )
+    second = ToolSpec(
+        name="list_dir",
+        description="列一层目录",
+        parameters={
+            "type": "object",
+            "properties": {"path": {"type": "string"}},
+            "required": ["path"],
+        },
+    )
+
+    wire = to_wire_tools([first, second])
+
+    # Assert：整份全等 —— 条数、顺序、包装层、parameters 仍是 dict，一次全覆盖。
+    assert wire == [
+        {
+            "type": "function",
+            "function": {
+                "name": "read_file",
+                "description": "读一个文本文件",
+                "parameters": {"type": "object", "properties": {"path": {"type": "string"}}},
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "list_dir",
+                "description": "列一层目录",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"path": {"type": "string"}},
+                    "required": ["path"],
+                },
+            },
+        },
+    ]
