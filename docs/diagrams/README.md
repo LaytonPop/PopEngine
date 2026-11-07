@@ -6,6 +6,7 @@
 | --- | --- | --- |
 | 数据怎么流过去、什么时候变形 | [01-run-sequence.html](./01-run-sequence.html) | 一张图看完一次 run，变形只发生在两条竖线上 |
 | 进来的时候哪几步会出错 | [02-from-wire.html](./02-from-wire.html) | 五道关卡，每一关都可能拿到垃圾，每一关都不许抛 |
+| 一次 run 的状态机 | [03-run-lifecycle.html](./03-run-lifecycle.html) | loop 的岔口只有 `end_turn` 一个；`stop_reason` 与 `tool_calls` 对不上的响应进不来（§七） |
 | 同一个东西在两边分别长什么样 | 下面这张表 | 左边是 Python，右边是真 JSON（从 `tests/fixtures/` 抄的，不是编的） |
 
 ---

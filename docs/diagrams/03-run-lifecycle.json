@@ -1,0 +1,215 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "kama-engine · 一次 run 的状态机",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "main-rail",
+        "label": "主轨：一圈怎么走",
+        "focus": [
+          "entry",
+          "chat",
+          "inspect",
+          "invoke",
+          "ok"
+        ],
+        "note": "user 消息进队 → 调模型 → 只看 stop_reason → 要工具就回填 → 再调，直到 end_turn。"
+      },
+      {
+        "id": "wire-gate",
+        "label": "转换层那道闸",
+        "focus": [
+          "chat",
+          "wire_bad",
+          "failed"
+        ],
+        "note": "等价校验在 loop 之前发生，抛出去落进同一条 failed 路径。"
+      },
+      {
+        "id": "budget",
+        "label": "预算与终局",
+        "focus": [
+          "invoke",
+          "max_steps",
+          "failed",
+          "ok"
+        ],
+        "note": "step 每转一圈加一，撞到 max_steps 就 failed 收工。"
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "loop",
+      "label": "主循环 · loop.py 的 for step in 1..max_steps"
+    },
+    {
+      "id": "out",
+      "label": "出口 · RunResult"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "entry",
+      "lane": "loop",
+      "col": 0,
+      "type": "frontend",
+      "label": "user 消息",
+      "sublabel": "messages = [user]",
+      "tag": "起点",
+      "width": 124,
+      "height": 44
+    },
+    {
+      "id": "chat",
+      "lane": "loop",
+      "col": 1,
+      "type": "backend",
+      "label": "provider.chat()",
+      "sublabel": "带全部消息 + 工具表",
+      "tag": "每圈一次",
+      "width": 124,
+      "height": 44
+    },
+    {
+      "id": "inspect",
+      "lane": "loop",
+      "col": 2,
+      "type": "security",
+      "label": "看 stop_reason",
+      "sublabel": "end_turn ?",
+      "tag": "唯一岔口",
+      "width": 124,
+      "height": 44
+    },
+    {
+      "id": "invoke",
+      "lane": "loop",
+      "col": 3,
+      "type": "messagebus",
+      "label": "invoke 工具",
+      "sublabel": "按 tool_call_id 回填",
+      "tag": "tool_use 分支",
+      "width": 124,
+      "height": 44
+    },
+    {
+      "id": "wire_bad",
+      "lane": "out",
+      "col": 1,
+      "type": "security",
+      "label": "抛 ValueError",
+      "sublabel": "非法响应就地拦死",
+      "tag": "你的补丁",
+      "width": 124,
+      "height": 44
+    },
+    {
+      "id": "ok",
+      "lane": "out",
+      "col": 3,
+      "type": "backend",
+      "label": "status = \"ok\"",
+      "sublabel": "交出 final_text",
+      "height": 44,
+      "width": 124
+    },
+    {
+      "id": "failed",
+      "lane": "out",
+      "col": 4,
+      "type": "security",
+      "label": "status = \"failed\"",
+      "sublabel": "error 带上原文",
+      "tag": "止血出口",
+      "width": 124,
+      "height": 44
+    },
+    {
+      "id": "max_steps",
+      "lane": "out",
+      "col": 5,
+      "type": "security",
+      "label": "status = \"failed\"",
+      "sublabel": "stop_reason = max_steps",
+      "tag": "护栏出口",
+      "width": 124,
+      "height": 44
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "entry",
+      "to": "chat",
+      "role": "main"
+    },
+    {
+      "id": "e2",
+      "from": "chat",
+      "to": "inspect",
+      "role": "main"
+    },
+    {
+      "id": "e3",
+      "from": "inspect",
+      "to": "invoke",
+      "label": "否：要工具",
+      "variant": "emphasis",
+      "role": "branch"
+    },
+    {
+      "id": "e4",
+      "from": "invoke",
+      "to": "chat",
+      "label": "回填后重问一轮",
+      "variant": "emphasis",
+      "role": "return"
+    },
+    {
+      "id": "e5",
+      "from": "inspect",
+      "to": "ok",
+      "label": "是：收工",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "e6",
+      "from": "chat",
+      "to": "wire_bad",
+      "label": "from_wire 抛",
+      "variant": "security",
+      "role": "async"
+    },
+    {
+      "id": "e7",
+      "from": "wire_bad",
+      "to": "failed",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "e8",
+      "from": "invoke",
+      "to": "max_steps",
+      "label": "仍无 end_turn",
+      "variant": "security",
+      "role": "error"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "你刚验的那条补丁",
+      "items": [
+        "stop_reason=tool_use 但 tool_calls 为空 → 抛 ValueError",
+        "带了 tool_calls 但 finish_reason 是 stop → 抛 ValueError",
+        "两条断言等价：谁先命中，都是同一个入口"
+      ]
+    }
+  ]
+}
