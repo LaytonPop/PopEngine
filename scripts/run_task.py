@@ -219,10 +219,10 @@ def main(argv: list[str]) -> int:
 
     load_env()
 
-    from kama_engine.llm.provider import OpenAIProvider
-    from kama_engine.loop import AgentLoop
-    from kama_engine.tools import ToolRegistry
-    from kama_engine.tools.builtin import ListDirTool, ReadFileTool
+    from pop_engine.llm.provider import OpenAIProvider
+    from pop_engine.loop import AgentLoop
+    from pop_engine.tools import ToolRegistry
+    from pop_engine.tools.builtin import ListDirTool, ReadFileTool
 
     # 工具锁定在被观察的仓库里：模型给的 path 只能在这个根下面活动。
     registry = ToolRegistry([ListDirTool(repo), ReadFileTool(repo)])

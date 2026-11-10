@@ -50,9 +50,9 @@ def main() -> int:
     load_dotenv(root / ".env")
 
     # 延迟到读完 .env 之后再导入 provider：它在构造时就会读环境变量。
-    from kama_engine.llm.provider import OpenAIProvider
-    from kama_engine.loop import AgentLoop
-    from kama_engine.tools import ToolRegistry
+    from pop_engine.llm.provider import OpenAIProvider
+    from pop_engine.loop import AgentLoop
+    from pop_engine.tools import ToolRegistry
 
     prompt = sys.argv[1] if len(sys.argv) > 1 else "你好，用一句话介绍你自己。"
 

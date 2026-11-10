@@ -17,9 +17,9 @@ from __future__ import annotations
 
 import time
 
-from kama_engine.llm import LLMProvider
-from kama_engine.tools import ToolRegistry
-from kama_engine.types import Message, RunResult, StepEvent
+from pop_engine.llm import LLMProvider
+from pop_engine.tools import ToolRegistry
+from pop_engine.types import Message, RunResult, StepEvent
 
 
 def _elapsed_ms(started: float) -> float:

@@ -1,7 +1,7 @@
 # OpenAI 兼容协议的映射表
 
 > 这个文件只回答一个问题：**我们的 `types.py` 和 OpenAI Chat Completions 的 JSON 怎么互转，转的时候丢了什么。**
-> 转换代码住 `src/kama_engine/openai_compat.py`（纯函数，不碰网络）；`llm_openai.py` 只管发 HTTP。
+> 转换代码住 `src/pop_engine/openai_compat.py`（纯函数，不碰网络）；`llm_openai.py` 只管发 HTTP。
 > 验收判据：每一行都要能回答「如果这一步转换失败，run 会怎样」。
 
 ## 一、一眼看全

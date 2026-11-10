@@ -9,9 +9,9 @@
 import pytest
 from fakes import AddTool, BoomTool, ScriptedProvider, assistant_text, assistant_tool_calls
 
-from kama_engine.loop import AgentLoop
-from kama_engine.tools import ToolRegistry
-from kama_engine.types import LLMResponse, Message, ToolCall
+from pop_engine.loop import AgentLoop
+from pop_engine.tools import ToolRegistry
+from pop_engine.types import LLMResponse, Message, ToolCall
 
 
 def _loop(provider: ScriptedProvider, max_steps: int = 5) -> AgentLoop:

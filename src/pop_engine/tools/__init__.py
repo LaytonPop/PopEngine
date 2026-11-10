@@ -10,7 +10,7 @@
 
 AI 改（2026-11-04）：本文件从 tools.py 挪成了包 `tools/` 的 __init__.py。
     和 llm 同一个原因：`tools.py` 与 `tools/` 不能共存，而真工具要住在
-    tools/builtin.py。`from kama_engine.tools import ToolRegistry` 的路径没变。
+    tools/builtin.py。`from pop_engine.tools import ToolRegistry` 的路径没变。
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from typing import Any, Protocol
 
-from kama_engine.types import ToolCall, ToolResult, ToolSpec
+from pop_engine.types import ToolCall, ToolResult, ToolSpec
 
 
 class Tool(Protocol):

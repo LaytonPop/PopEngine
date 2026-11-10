@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from kama_engine.types import ToolSpec
+from pop_engine.types import ToolSpec
 
 # 读文件最多返回这么多行；超过就截断并在末尾注明。
 # 选 200 而不是 1000：上下文不是无限的，一个超大文件塞进去会挤掉关键信息。

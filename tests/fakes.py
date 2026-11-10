@@ -16,7 +16,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from kama_engine.types import LLMResponse, Message, ToolCall, ToolSpec
+from pop_engine.types import LLMResponse, Message, ToolCall, ToolSpec
 
 
 def assistant_text(text: str) -> LLMResponse:

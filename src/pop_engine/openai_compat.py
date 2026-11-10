@@ -2,7 +2,7 @@ import json
 from collections.abc import Sequence
 from typing import Any
 
-from kama_engine.types import LLMResponse, LLMStopReason, Message, ToolCall, ToolSpec
+from pop_engine.types import LLMResponse, LLMStopReason, Message, ToolCall, ToolSpec
 
 
 def to_wire(messages: Sequence[Message]) -> list[dict]:

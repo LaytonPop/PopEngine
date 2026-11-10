@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from kama_engine.openai_compat import from_wire, to_wire, to_wire_tools
-from kama_engine.types import Message, ToolCall, ToolSpec
+from pop_engine.openai_compat import from_wire, to_wire, to_wire_tools
+from pop_engine.types import Message, ToolCall, ToolSpec
 
 
 def load_response() -> dict:

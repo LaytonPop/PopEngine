@@ -29,14 +29,14 @@
 
 ### 1. 接线 + 场景 A 真跑（约 60 分钟）
 
-- [X] `src/kama_engine/llm/provider.py`：实现 `OpenAIProvider.chat()`（urllib，不引 SDK）
+- [X] `src/pop_engine/llm/provider.py`：实现 `OpenAIProvider.chat()`（urllib，不引 SDK）
 - [X] `scripts/hello_llm.py`：一句输入 → 打印 `RunResult`
 - [X] 真跑一次 → 验收：真实输出 + `stop_reason: end_turn`（2026-11-04 通过：`steps=1`，真模型输出；负向也验了：错 key → 401 带完整响应体）
 - [X] `to_wire_tools` 的测试（2026-11-04 三条；2026-11-07 补第四条**双 spec 顺序断言** —— 前三条都只传一个 spec，对"顺序错乱/只取一个"永远是绿的）
 
 ### 2. 真工具 + 场景 B 真跑（约 60 分钟）
 
-- [X] `src/kama_engine/tools/builtin.py`：`list_dir` / `read_file`
+- [X] `src/pop_engine/tools/builtin.py`：`list_dir` / `read_file`
   （锁根目录、越界返 `is_error=True`、截断要明说、参数写 JSON Schema）
 - [X] `scripts/run_task.py`：第 2 段验收脚本（抠 JSON → 验五键类型 → 验 trace 有 `list_dir` → 顺手做 `tool_call_id` 配对自检）
 - [X] 真跑 → 验收：trace 里两轮工具往返，且是模型自己决定先 list 再 read（2026-11-04：本项目 6 步 11 次调用、ChatBox 7 步 17 次调用，两个仓库都 PASS）

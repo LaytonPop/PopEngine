@@ -1,4 +1,4 @@
-# kama-engine
+# PopEngine
 
 一个我自己写得出来、每行都能解释的 agent 引擎。**loop 为主，graph 做对比。**
 
@@ -36,7 +36,7 @@ uv run pytest
 ## 目录
 
 ```text
-src/kama_engine/
+src/pop_engine/
   types.py            词汇表：Message / ToolCall / ToolResult / LLMResponse / RunResult
   llm/                模型层（包）
     __init__.py       边界：一个 chat() 签名（Protocol），可换假模型

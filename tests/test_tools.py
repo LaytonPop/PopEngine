@@ -6,8 +6,8 @@
 
 from fakes import AddTool, BoomTool
 
-from kama_engine.tools import ToolRegistry
-from kama_engine.types import ToolCall
+from pop_engine.tools import ToolRegistry
+from pop_engine.types import ToolCall
 
 
 def test_invoke_runs_the_tool() -> None:

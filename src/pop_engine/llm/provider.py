@@ -1,5 +1,5 @@
 """
-- 新建 `src/kama_engine/llm/provider.py`，实现 `OpenAIProvider.chat(messages, tools) -> LLMResponse`
+- 新建 `src/pop_engine/llm/provider.py`，实现 `OpenAIProvider.chat(messages, tools) -> LLMResponse`
   内部顺序固定死：
   ``to_wire(messages) → to_wire_tools(tools) → POST /chat/completions``
   ``→ 检查 status_code → from_wire(resp.json())``
@@ -19,8 +19,8 @@ from collections.abc import Sequence
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from kama_engine.openai_compat import from_wire, to_wire, to_wire_tools
-from kama_engine.types import LLMResponse, Message, ToolSpec
+from pop_engine.openai_compat import from_wire, to_wire, to_wire_tools
+from pop_engine.types import LLMResponse, Message, ToolSpec
 
 
 class OpenAIProvider:
