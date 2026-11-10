@@ -185,3 +185,94 @@ def test_f_unknown_stop_reason_stops_immediately() -> None:
     assert result.stop_reason == "error"
     assert result.steps == 1
     assert "unknown" in (result.error or "")
+
+
+# ---------------------------------------------------------------- 事件（c 轮）
+def test_g_end_turn_records_one_model_event() -> None:
+    """一问一答：只有一条 model 事件，且把它该说的都说全了。
+
+    事件是"给人看的时间线"，所以除了条数，还要验它带上了 step 和 stop_reason ——
+    只断言 len == 1 的话，一个空的 StepEvent 也能过。
+    """
+    provider = ScriptedProvider([assistant_text("你好。")])
+
+    result = _loop(provider).run("打个招呼")
+
+    assert len(result.events) == 1
+    event = result.events[0]
+    assert event.kind == "model"
+    assert event.step == 1
+    assert event.stop_reason == "end_turn"
+    # 计时必须真的做了：0 是合法耗时，None 说明压根没埋点。
+    assert event.duration_ms is not None
+    assert event.duration_ms >= 0
+
+
+def test_h_tool_call_records_start_and_end_in_order() -> None:
+    """一次工具调用 = start + end 两条，且顺序不能反。
+
+    断言的是完整的 kind 序列，不是"有没有两条 tool 事件" ——
+    后者对「先 end 后 start」这种错误照样是绿的。
+    而顺序正是这份日志的意义：它要能还原"先要工具、再拿到结果"这件事。
+    """
+    provider = ScriptedProvider(
+        [
+            assistant_tool_calls(ToolCall(id="call_1", name="add", arguments={"a": 1, "b": 2})),
+            assistant_text("算完了，是 3。"),
+        ]
+    )
+
+    result = _loop(provider).run("1 加 2 等于几")
+
+    assert [event.kind for event in result.events] == [
+        "model",
+        "tool_start",
+        "tool_end",
+        "model",
+    ]
+    start, end = result.events[1], result.events[2]
+    # 两条必须对得上同一个调用，否则日志没法把"开始"和"结束"配成一对。
+    assert start.tool_call_id == end.tool_call_id == "call_1"
+    assert start.tool_name == end.tool_name == "add"
+    assert end.is_error is False
+    assert end.duration_ms is not None
+
+
+def test_i_tool_failure_is_visible_as_is_error() -> None:
+    """工具炸了也要留痕：is_error 是给日志用的，模型看到的只是那段文字。
+
+    这条同时在验一件历史遗留：ToolResult.is_error 造出来之后一直没人读过，
+    loop 只用 content 和 tool_call_id。这里是它第一个消费方。
+    """
+    provider = ScriptedProvider(
+        [
+            assistant_tool_calls(ToolCall(id="call_1", name="boom", arguments={})),
+            assistant_text("工具挂了，我换个办法。"),
+        ]
+    )
+    loop = AgentLoop(provider, ToolRegistry([AddTool(), BoomTool()]))
+
+    result = loop.run("试试那个会炸的工具")
+
+    end = result.events[2]
+    assert end.kind == "tool_end"
+    assert end.is_error is True
+
+
+def test_j_provider_exception_still_records_an_event() -> None:
+    """模型层抛异常，也要留下一条事件。
+
+    不然"这次 run 花了多久才炸"就无从谈起 —— 失败路径的事件
+    恰恰是调 agent 时最想看的那一条。
+    """
+    provider = ScriptedProvider([RuntimeError("connection reset by peer")])
+
+    result = _loop(provider).run("随便问问")
+
+    assert len(result.events) == 1
+    event = result.events[0]
+    assert event.kind == "model"
+    assert event.stop_reason is None  # 没拿到响应，自然没有结束原因
+    assert event.error is not None
+    assert "connection reset by peer" in event.error
+    assert event.duration_ms is not None

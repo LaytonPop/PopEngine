@@ -10,7 +10,7 @@ loop、LLM provider、工具三方只通过这些类型交流，谁都不认识�
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 # 这一轮模型为什么停下 —— 模型层的词汇。
@@ -26,6 +26,10 @@ LLMStopReason = Literal["end_turn", "tool_use", "unknown"]
 RunStopReason = Literal["end_turn", "max_steps", "error"]
 
 Role = Literal["system", "user", "assistant", "tool"]
+
+# 事件的种类。一个类 + 一个判别式，而不是三个类 ——
+# 字段还只有八个，拆成 Union 是过度设计。真涨到互斥得厉害再拆。
+EventKind = Literal["model", "tool_start", "tool_end"]
 
 
 @dataclass(frozen=True)
@@ -108,10 +112,42 @@ class LLMResponse:
 
 
 @dataclass(frozen=True)
+class StepEvent:
+    """一次 run 里发生的单件事。**给人看的，模型永远看不到它。**
+
+    和 Message 的分工（这条区分比字段本身重要）：
+      - Message   是**模型视角**的对话上下文，下一轮 chat 要用它
+      - StepEvent 是**人的视角**的观测记录，只用来调试、以及 M3 拿来做对比
+
+    两者都放在 RunResult 里，但消费方不同。所以不是"过程记录一律不进结果"，
+    而是"进结果的过程记录，要分清谁在消费"。
+
+    字段按 kind 分工：
+      kind == "model"        → stop_reason / duration_ms / error
+      kind == "tool_start"   → tool_name / tool_call_id
+      kind == "tool_end"     → tool_name / tool_call_id / is_error / duration_ms
+    用不到的字段留 None，不做联合类型 —— 八个字段还没多到值得拆。
+    """
+
+    kind: EventKind
+    step: int  # 第几次模型调用（1-based）
+
+    stop_reason: LLMStopReason | None = None
+    duration_ms: float | None = None
+
+    tool_name: str | None = None
+    tool_call_id: str | None = None
+    is_error: bool | None = None
+
+    error: str | None = None
+
+
+@dataclass(frozen=True)
 class RunResult:
     """一次 run 的结局。**循环结束后唯一被交出来的东西。**
 
     messages 是完整现场：出了问题先看它，不用加日志。
+    events 是给人看的时间线：哪一步、花了多久、哪个工具错了。
     """
 
     status: Literal["ok", "failed"]
@@ -120,3 +156,7 @@ class RunResult:
     messages: tuple[Message, ...]
     steps: int  # 调用了几次模型（不是"跑了几圈工具"）
     error: str | None = None
+    # 默认空 tuple：老代码不传 events 也能构造，是纯增量改动。
+    # 用 default_factory 不用 = ()，是为了养成习惯 —— 哪天换成 list/dict，
+    # = [] 就是共享可变默认值那个经典坑。
+    events: tuple[StepEvent, ...] = field(default_factory=tuple)

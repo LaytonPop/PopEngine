@@ -1,23 +1,34 @@
-"""M1 的循环体。**这个文件由你自己写。**
+"""循环体：一次 agent run 的全部控制流。
 
-靶子已经立好了：`tests/test_loop.py` 里 4 个场景现在全是红的，
-它们钉死了 `AgentLoop` 的对外形状和行为。你的任务只有一件：
+一处判断，一条回边，三个出口 —— 整台引擎就这么大：
+    看 stop_reason 分岔（end_turn 收工 / unknown 止损 / 其余去调工具）
+    调完工具带着结果绕回 provider.chat
+    出口只有 ok、failed(error)、failed(max_steps) 三种
 
-    把 `run()` 写出来，让 4 个测试变绿，并且**不许改测试来迁就实现**。
+M1 时的约束是「不加日志、不加事件」；M2 的 c 轮解冻了这一条：
+现在每一步都会产出 `StepEvent`（见 types.py），攒在 `events` 里随 RunResult 交出去。
+**loop 只负责"发生了什么"，序列化成 jsonl 是脚本的事** —— 它不认识文件，也不认识 JSON。
 
-规则：
-  - 只改这个文件。types.py / llm.py / tools.py 是契约，动了就要说明理由。
-  - 不用加日志、不用加事件、不用加重试 —— M1 只验证控制流。
-  - 全绿之后再跑 ruff 和 mypy。
-
-卡住看 `docs/M1-任务书.md`（里面有分步提示，但故意不给代码）。
+契约边界：types.py / llm/ / tools/ 是对外契约，改它们要说明理由。
+`docs/M1-任务书.md` 是当时的作业书，已完成，留作记录。
 """
 
 from __future__ import annotations
 
+import time
+
 from kama_engine.llm import LLMProvider
 from kama_engine.tools import ToolRegistry
-from kama_engine.types import Message, RunResult
+from kama_engine.types import Message, RunResult, StepEvent
+
+
+def _elapsed_ms(started: float) -> float:
+    """从 started 到现在过了多少毫秒，保留两位小数。
+
+    用 perf_counter 不用 time()：前者是单调时钟，不受系统改时间/对时影响；
+    后者可能往回跳，算出来的耗时会是负数。计量一律用单调时钟。
+    """
+    return round((time.perf_counter() - started) * 1000, 2)
 
 
 class AgentLoop:
@@ -58,10 +69,24 @@ class AgentLoop:
         # 同一轮 run 里，模型每次看到的说明书必须一模一样。
         tool_specs = self.tools.specs()
 
+        # 事件只在这里攒，序列化不归 loop 管 —— 它不认识 JSON，也不认识文件。
+        # 换 stdout / SQLite / 远端：改的永远是消费方，这个文件不用动。
+        events: list[StepEvent] = []
+
         for step in range(1, self.max_steps + 1):
+            started = time.perf_counter()
             try:
                 response = self.provider.chat(list(messages), tool_specs)
             except Exception as exc:
+                # 失败也要记：不然"这次 run 花了多久才炸"就无从谈起。
+                events.append(
+                    StepEvent(
+                        kind="model",
+                        step=step,
+                        duration_ms=_elapsed_ms(started),
+                        error=f"{type(exc).__name__}:{exc}",
+                    )
+                )
                 return RunResult(
                     status="failed",
                     stop_reason="error",
@@ -69,7 +94,17 @@ class AgentLoop:
                     messages=tuple(messages),
                     steps=step,
                     error=f"{type(exc).__name__}:{exc}",
+                    events=tuple(events),
                 )
+
+            events.append(
+                StepEvent(
+                    kind="model",
+                    step=step,
+                    stop_reason=response.stop_reason,
+                    duration_ms=_elapsed_ms(started),
+                )
+            )
 
             # 先记录模型的请求，再记录工具的结果，保证结果有对应得到请求，先请求后结果的原因是因为
             messages.append(response.message)
@@ -82,9 +117,13 @@ class AgentLoop:
                     messages=tuple(messages),
                     steps=step,
                     error=None,
+                    events=tuple(events),
                 )
 
-            #
+            # unknown 也是终点：它是「模型合法地以我们没建模的原因停下」
+            # （length 被截断 / content_filter 被拦）。这种响应的 tool_calls
+            # 一定是空的，若放它往下走，for 一次不跑、同一响应再绕一圈，
+            # 会把整个预算烧完而 error 还是 None。
             if response.stop_reason == "unknown":
                 return RunResult(
                     status="failed",
@@ -93,10 +132,34 @@ class AgentLoop:
                     messages=tuple(messages),
                     steps=step,
                     error=f"模型以未建模的原因停下（stop_reason=unknown），第 {step} 步中止",
+                    events=tuple(events),
                 )
+
             # 工具失败也会返回 ToolResult，这里不需要额外的 try/except
             for call in response.message.tool_calls:
+                # start / end 两条：中途没有可观测点（无流式、无异步），
+                # 但"开始了没有结束"这件事能在日志里显形（比如进程被 kill）。
+                events.append(
+                    StepEvent(
+                        kind="tool_start",
+                        step=step,
+                        tool_name=call.name,
+                        tool_call_id=call.id,
+                    )
+                )
+                started_tool = time.perf_counter()
                 result = self.tools.invoke(call)
+                events.append(
+                    StepEvent(
+                        kind="tool_end",
+                        step=step,
+                        tool_name=call.name,
+                        tool_call_id=result.tool_call_id,
+                        # is_error 造出来之后一直没人读过，这里是第一个消费方
+                        is_error=result.is_error,
+                        duration_ms=_elapsed_ms(started_tool),
+                    )
+                )
                 messages.append(
                     Message(
                         role="tool",
@@ -112,5 +175,6 @@ class AgentLoop:
             final_text="",
             messages=tuple(messages),
             steps=self.max_steps,
-            error=None,
+            error=f"超过 max_steps={self.max_steps} 步仍未结束",
+            events=tuple(events),
         )
