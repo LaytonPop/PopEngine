@@ -11,6 +11,9 @@ venv/
 
 # runtime artifacts
 runs/
+# traces 是「跑一次生一次」的产物，每次内容都不同，不入库。
+# 要留证的那一份，复制到 docs/evidence/ 下（那边有说明，也有它为什么值得留）。
+traces/
 
 # 草稿 / 临时产物（讨论稿、中间稿，随时可删）
 .tmp/

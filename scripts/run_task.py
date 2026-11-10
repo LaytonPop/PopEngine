@@ -10,8 +10,12 @@
     这份脚本退出码非零就代表没过，将来可以原样塞进 CI。
 
 跑法（项目根目录）：
-    uv run python scripts/run_task.py D:\\workSpace\\Pop\\kama-engine
-    uv run python scripts/run_task.py <仓库路径> --trace     # 额外打印工具轨迹
+    uv run python scripts/run_task.py <仓库路径>
+    uv run python scripts/run_task.py <仓库路径> --trace              # 打印工具轨迹到终端
+    uv run python scripts/run_task.py <仓库路径> --trace traces\\a.jsonl  # 落盘成 jsonl
+
+`--trace` 后面跟路径就写文件，不跟就只打印 —— 两个功能不冲突：
+一个是给人当场看的，一个是给程序读的。
 
 断言 3（换个仓库再跑同样合法）没法在一个进程里自动完成，
 所以这条靠"换个路径再跑一次本脚本"，脚本本身对任何路径一视同仁。
@@ -22,6 +26,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -152,15 +157,62 @@ def check_trace(messages: tuple[Any, ...]) -> tuple[list[str], list[str], list[s
     return problems, order, warnings
 
 
+def parse_args(argv: list[str]) -> tuple[Path, Path | None]:
+    """拆出「仓库路径」和「可选的 --trace 输出路径」。
+
+    这里不用 argparse：只有两个参数，而 argparse 会顺手接管 --help 的文案，
+    反而看不清我们自己想说什么。手写一个够用，也更好讲。
+
+    这个函数是为了修一个静默 bug：旧版是
+        args = [item for item in argv if not item.startswith("--")]
+        show_trace = "--trace" in argv
+    于是 `--trace traces\\a.jsonl` 里那个路径不以 "--" 开头，会被当成**仓库路径**，
+    而 --trace 仍然只是个"打印到终端"的开关 —— 跑完 PASS、退出码 0、文件根本没创建。
+    静默失败是最难发现的一种，所以解析要显式。
+    """
+    repo: str | None = None
+    trace: str | None = None
+
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg == "--trace":
+            i += 1
+            if i >= len(argv):
+                raise SystemExit("--trace 后面要跟一个输出路径，或者干脆不写这个选项")
+            trace = argv[i]
+        elif arg.startswith("--"):
+            raise SystemExit(f"不认识的选项：{arg}")
+        elif repo is None:
+            repo = arg
+        else:
+            raise SystemExit(f"多余的位置参数：{arg}")
+        i += 1
+
+    if repo is None:
+        raise SystemExit("用法: python scripts/run_task.py <仓库路径> [--trace <输出路径>]")
+
+    return Path(repo), (Path(trace) if trace else None)
+
+
+def write_events(path: Path, events: tuple[Any, ...]) -> None:
+    """把事件一行一条写成 JSONL。父目录不存在就建。
+
+    ensure_ascii=False：中文原样落盘，不写成 \\uXXXX —— 这份文件是给人看的。
+    内容是 StepEvent 的**白名单字段**（asdict 只取 dataclass 上声明的那些），
+    所以 key、header、request body 这些永远进不来。
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as fh:
+        for event in events:
+            fh.write(json.dumps(asdict(event), ensure_ascii=False) + "\n")
+
+
 def main(argv: list[str]) -> int:
-    args = [item for item in argv if not item.startswith("--")]
-    show_trace = "--trace" in argv
+    repo_arg, trace_path = parse_args(argv)
+    show_trace = "--trace" in argv  # 不管落不落盘，都打到终端一份
 
-    if not args:
-        print("用法: python scripts/run_task.py <仓库路径> [--trace]", file=sys.stderr)
-        return 2
-
-    repo = Path(args[0]).expanduser().resolve()
+    repo = repo_arg.expanduser().resolve()
     if not repo.is_dir():
         print(f"不是目录：{repo}", file=sys.stderr)
         return 2
@@ -193,6 +245,10 @@ def main(argv: list[str]) -> int:
                 print(f"  [{index}] 工具返回   {head}")
 
     print(f"工具轨迹 : {order if order else '（无）'}")
+
+    if trace_path is not None:
+        write_events(trace_path, result.events)
+        print(f"events   : {trace_path}（{len(result.events)} 行）")
 
     data: dict[str, Any] | None = None
     if result.status != "ok":
