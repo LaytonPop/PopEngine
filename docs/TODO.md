@@ -2,7 +2,7 @@
 
 > **这是唯一入口。** 其他 `docs/*.md` 讲的是"为什么这么做、检查点是什么"，不是待办。
 > 两边说法冲突时，以本文件为准；做完一件事就回来打勾。
-> 更新时间：2026-11-07
+> 更新时间：2026-11-10
 
 ## 进度总览
 
@@ -12,12 +12,12 @@
 | M1 假数据 loop（4 场景 + 工具 + 冒烟） | ✅ 12 passed（loop 7 / tools 4 / smoke 1） |
 | M2 真模型 · 转换层               | ✅ 13 passed（含双 spec 顺序断言） |
 | M2 真模型 · 接线 + 真工具        | ✅ a/b 轮验收完成，回归 3/3 |
-| M2 事件（events.jsonl）          | 🚧 下一步（c 轮） |
-| M3 graph 引擎跑同一任务 + 对比    | ⬜             |
+| M2 事件（events.jsonl）          | ✅ c 轮完成（2026-11-10），29 passed |
+| M3 graph 引擎跑同一任务 + 对比    | ⬜ 下一站    |
 | M4 README + 面试讲稿              | ⬜             |
 
-> 测试总数：**25 = loop 7 + openai_compat 13 + tools 4 + smoke 1**。
-> 沿革：18（M2 转换层）→ 23（a 轮后）→ 25（b 轮补完双 spec + 场景 F）。
+> 测试总数：**29 = loop 11 + openai_compat 13 + tools 4 + smoke 1**。
+> 沿革：18（M2 转换层）→ 23（a 轮后）→ 25（b 轮）→ **29**（c 轮补 4 条事件测试）。
 
 ---
 
@@ -45,11 +45,15 @@
       修前：`steps=8 error=None 模型调用=8` 空转烧钱；修后：`steps=1 stop=error 模型调用=1`。
       **破了一次「不许改 loop.py」的铁律**，理由：映射表 §二·6 自己把责任派给 loop，边界划漏了一格）
 
-### 3. 事件 + 失败记录（约 45 分钟）
+### 3. 事件 + 失败记录（约 45 分钟）✅ 2026-11-10 完成
 
-- [ ] 每步发事件 → 落 `events.jsonl`（step / stop_reason / 工具名 / 耗时 / is_error）
-- [ ] `max_steps` 终局事件写人话（`M2-待办.md` 第 3 条）
-- [ ] 故意失败一次（错 key 或错模型名），把那份 events 留下
+- [X] 每步发事件 → 落 `events.jsonl`（step / stop_reason / 工具名 / 耗时 / is_error）
+      设计见 `docs/M2-事件设计.md`；`StepEvent` 在 `types.py`，埋点全在 `loop.py`，
+      序列化只在 `run_task.py`（loop 不认识 JSON、不认识文件）
+- [X] `max_steps` 终局事件写人话（`error=f"超过 max_steps={n} 步仍未结束"`）
+- [X] 故意失败一次（错 key → 401），events 留档 `docs/evidence/m2-provider-401.jsonl`
+- 实测：`model 6 行 == steps 6`、`10 对 start/end` 且 `tool_call_id` 全配上、总行数 `26 == 6+2×10`
+- 红线已验证：`sk-` / `Authorization` / `Bearer` 零命中；字段白名单 8 个键
 
 ### 4. M2 收尾
 
