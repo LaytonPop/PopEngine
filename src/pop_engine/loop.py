@@ -10,7 +10,7 @@ M1 时的约束是「不加日志、不加事件」；M2 的 c 轮解冻了这�
 **loop 只负责"发生了什么"，序列化成 jsonl 是脚本的事** —— 它不认识文件，也不认识 JSON。
 
 契约边界：types.py / llm/ / tools/ 是对外契约，改它们要说明理由。
-`docs/M1-任务书.md` 是当时的作业书，已完成，留作记录。
+`docs/history/M1-任务书.md` 是当时的作业书，已完成，留作记录。
 """
 
 from __future__ import annotations
