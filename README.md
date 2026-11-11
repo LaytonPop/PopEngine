@@ -51,9 +51,17 @@ tests/
   test_loop.py        M1 四场景
   test_openai_compat.py
 docs/
-  TODO.md             ★ 唯一待办清单
-  M2-任务书.md         M2 怎么切、检查点、会踩的坑
-  openai映射表.md      协议逐行对照 + 真实响应实测记录
-  diagrams/           两张图 + 四组真数据对照
-  archive/            作废的计划，不要照做
+  TODO.md             ★ 唯一待办清单（从这里进）
+  协作约定.md          怎么提交：分支 alma/* Pop/*、commit 格式、红线
+  验收手册.md          a–e 轮怎么验：跑什么、怎么算过、怎么故意弄坏
+  design/             设计文档，还活着、还被引用的「为什么」
+    分层与边界.md       原子 / 分子 / 五层 / 框架到底封装了什么
+    openai映射表.md     协议逐行对照 + 真实响应实测记录
+    事件设计.md         StepEvent 为什么这么设计
+    引擎对比.md         和 pi / Codex / Claude Code 的逐行对比（M3 依据）
+  history/            阶段性完结，留作记录，不再更新
+    M1-任务书.md / M2-任务书.md / M2-真实任务.md / M2-待办.md
+    archive/          作废的计划，不要照做
+  diagrams/           三张图 + 四组真数据对照
+  evidence/           两次真跑的 jsonl 留档（一次成功、一次 401）
 ```
