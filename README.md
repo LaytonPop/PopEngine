@@ -3,7 +3,7 @@
 一个我自己写得出来、每行都能解释的 agent 引擎。**loop 为主，graph 做对比。**
 
 > 设计目标：面试时能站着讲 20 分钟，每个设计决定都能回答「为什么」。
-> 参照：waku-agent 的形状 + KamaClaude S1 的源码。笔记在 `D:\workSpace\Pop\github\kamacode`。
+> 参照：waku-agent 的形状 + KamaClaude S1 的源码。设计文档都在本仓库 `docs/`。
 
 ## 这不是什么
 
@@ -24,7 +24,7 @@
 
 **待办清单（唯一入口）：[`docs/TODO.md`](docs/TODO.md)** ← 每次开工先看这个
 
-阶段 0 一页纸：`D:\workSpace\Pop\github\kamacode\面试项目\02-阶段0-一页纸.md`
+阶段 0 一页纸：属个人笔记，未随仓库发布。冻结清单见 [`docs/TODO.md`](docs/TODO.md)。
 
 ## 开发
 
