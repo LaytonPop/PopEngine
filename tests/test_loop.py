@@ -7,7 +7,14 @@
 """
 
 import pytest
-from fakes import AddTool, BoomTool, ScriptedProvider, assistant_text, assistant_tool_calls
+from fakes import (
+    AddTool,
+    BoomTool,
+    CountingTool,
+    ScriptedProvider,
+    assistant_text,
+    assistant_tool_calls,
+)
 
 from pop_engine.loop import AgentLoop
 from pop_engine.tools import ToolRegistry
@@ -276,3 +283,102 @@ def test_j_provider_exception_still_records_an_event() -> None:
     assert event.error is not None
     assert "connection reset by peer" in event.error
     assert event.duration_ms is not None
+
+
+# ------------------------------------------------- 预算语义的边界（M3 前置）
+def test_k_last_step_end_turn_still_succeeds() -> None:
+    """恰好用满预算的那一步答完，算成功。
+
+    这是**特征测试**（characterization test），不是修 bug —— 现在就是这个行为，
+    写下来是为了把它从"靠 return 摆的位置凑出来的事实"变成"一条明说的契约"。
+
+    为什么要钉：任何一次把控制流从 for 改成 while、或给末尾加兜底的人，
+    都可能顺手把它改成"用满预算 = 失败"。那是个静悄悄的行为变更，
+    没有测试就没人会发现。
+    """
+    calls = [
+        assistant_tool_calls(ToolCall(id="c1", name="add", arguments={"a": 1, "b": 1})),
+        assistant_tool_calls(ToolCall(id="c2", name="add", arguments={"a": 2, "b": 2})),
+        assistant_text("好了，答案是 2。"),  # ← 第 3 次 = 预算的最后一次
+    ]
+    provider = ScriptedProvider(calls)
+
+    result = _loop(provider, max_steps=3).run("数到三")
+
+    assert result.status == "ok"
+    assert result.stop_reason == "end_turn"
+    assert result.final_text == "好了，答案是 2。"
+    assert result.steps == 3
+    assert result.error is None
+    # 预算限的是调用次数：正好 3 次，没有第 4 次
+    assert len(provider.calls) == 3
+
+
+def test_l_last_step_tool_use_leaves_an_orphan_side_effect() -> None:
+    """用满预算那一步还在要工具：工具照常执行，结果却喂不回模型。
+
+    钉住一个真实存在、且**不好**的行为（2026-11-12 读代码发现）：
+
+        第 N 次调用返回 tool_calls
+        → loop 照常执行这批工具（副作用已发生，不可逆）
+        → 结果 append 进 messages
+        → 掉出 for，返回 failed/max_steps
+        → **那份工具结果，模型永远读不到**
+
+    为什么留着不修：修它要动控制流（最后一步不给工具，或允许一次只读收尾），
+    那是 M5 的事，M3 要保持两个引擎的控制流形状一致才比得公平。
+    但"留着"和"不知道"是两件事 —— 这条测试就是那句"我知道"。
+
+    M5 的"重跑一次，副作用会不会执行两遍"那个问题，起点就在这。
+    """
+    counter = CountingTool()
+
+    def _count_call(i: int) -> LLMResponse:
+        return assistant_tool_calls(ToolCall(id=f"c{i}", name="count", arguments={}))
+
+    provider = ScriptedProvider([_count_call(i) for i in range(10)])
+    loop = AgentLoop(provider, ToolRegistry([counter]), max_steps=3)
+
+    result = loop.run("一直数")
+
+    assert result.status == "failed"
+    assert result.stop_reason == "max_steps"
+    assert result.steps == 3
+
+    # 三次都执行了 —— 包括最后一次，它的产出没有任何人消费
+    assert len(counter.calls) == 3
+
+    # 现场里确实躺着那三条工具结果：数据在，只是没人读
+    tool_messages = [m for m in result.messages if m.role == "tool"]
+    assert len(tool_messages) == 3
+    assert all("副作用已发生" in (m.content or "") for m in tool_messages)
+
+    # 事件层也看得见：最后一次 tool_end 和 max_steps 结局同时存在
+    tool_ends = [e for e in result.events if e.kind == "tool_end"]
+    assert len(tool_ends) == 3
+    assert tool_ends[-1].step == 3
+
+
+def test_l2_orphan_side_effect_is_only_at_the_boundary() -> None:
+    """对照：没撞上预算时，工具结果一定被模型读到 —— 孤儿只发生在边界上。
+
+    没有这条对照，上面那个测试也可以被解读成"工具结果本来就不回填"。
+    两条一起看才说得清：孤儿副作用是**边界现象**，不是常态。
+    """
+    counter = CountingTool()
+
+    provider = ScriptedProvider(
+        [
+            assistant_tool_calls(ToolCall(id="c1", name="count", arguments={})),
+            assistant_text("数完了"),
+        ]
+    )
+    loop = AgentLoop(provider, ToolRegistry([counter]), max_steps=5)
+
+    result = loop.run("数一次")
+
+    assert result.status == "ok"
+    assert len(counter.calls) == 1
+    # 第 2 次调用时，模型确实看见了上一次的工具结果
+    second_messages, _ = provider.calls[1]
+    assert any(m.role == "tool" for m in second_messages)

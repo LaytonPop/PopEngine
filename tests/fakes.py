@@ -87,3 +87,27 @@ class BoomTool:
 
     def run(self, **kwargs: Any) -> str:
         raise RuntimeError("工具内部炸了")
+
+
+class CountingTool:
+    """有副作用、且把副作用记下来的工具。
+
+    用来回答一个 mock 回答不了的问题：**这个工具到底被执行了几次**。
+    存在理由（2026-11-12）：`max_steps` 用完的那一步，loop 会照常执行
+    工具、把结果 append 进 messages，然后返回 failed —— 模型永远读不到
+    那个结果，但副作用已经发生了。这是个真实存在的行为，得钉住它，
+    免得将来有人改控制流时不知道自己动了什么。
+    """
+
+    spec = ToolSpec(
+        name="count",
+        description="有副作用的工具：被调用一次就记一次",
+        parameters={"type": "object", "properties": {}},
+    )
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    def run(self, **kwargs: Any) -> str:
+        self.calls.append(dict(kwargs))
+        return f"第 {len(self.calls)} 次副作用已发生"
