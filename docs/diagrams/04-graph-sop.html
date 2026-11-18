@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>graph 引擎的 SOP：九步一条环</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --surface: #f7f7f5;
+    --line: #e3e2dd;
+    --text: #24241f;
+    --muted: #73726c;
+    --ink: #26215C;
+    --ink-bg: #EEEDFE;
+    --warn: #854F0B;
+    --warn-bg: #FAEEDA;
+    --ok: #0F6E56;
+    --ok-bg: #E1F5EE;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #191918;
+      --surface: #232322;
+      --line: #34342f;
+      --text: #e8e7e1;
+      --muted: #9c9a92;
+      --ink: #CECBF6;
+      --ink-bg: #26215C;
+      --warn: #FAC775;
+      --warn-bg: #412402;
+      --ok: #9FE1CB;
+      --ok-bg: #04342C;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 48px 24px 80px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 940px; margin: 0 auto; }
+  header { margin-bottom: 40px; }
+  h1 {
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0 0 10px;
+  }
+  .sub { color: var(--muted); margin: 0; }
+  .sub code { font-family: var(--mono); font-size: 13px; }
+  h2 {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin: 48px 0 16px;
+  }
+
+  .flow { position: relative; }
+  .flow::before {
+    content: "";
+    position: absolute;
+    left: 15px;
+    top: 22px;
+    bottom: 22px;
+    width: 1px;
+    background: var(--line);
+  }
+
+  .step {
+    position: relative;
+    display: grid;
+    grid-template-columns: 32px 1fr;
+    gap: 16px;
+    padding: 10px 0;
+    align-items: start;
+  }
+  .num {
+    position: relative;
+    z-index: 1;
+    width: 31px;
+    height: 31px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    transition: background .18s, color .18s, border-color .18s;
+  }
+  .body { padding-top: 3px; min-width: 0; }
+  .name { font-weight: 600; }
+  .name code {
+    font-family: var(--mono);
+    font-size: 13.5px;
+    font-weight: 400;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 1px 6px;
+    margin-left: 6px;
+    vertical-align: 1px;
+  }
+  .desc { color: var(--muted); font-size: 14px; margin-top: 2px; }
+  .desc b { color: var(--text); font-weight: 600; }
+
+  .step.load { }
+  .step.load .num {
+    background: var(--warn-bg);
+    color: var(--warn);
+    border-color: transparent;
+  }
+  .badge {
+    display: inline-block;
+    font-size: 11.5px;
+    line-height: 1.5;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--warn-bg);
+    color: var(--warn);
+    margin-left: 8px;
+    vertical-align: 1.5px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .step.start .num {
+    background: var(--ink-bg);
+    color: var(--ink);
+    border-color: transparent;
+  }
+  .step.exit .num {
+    background: var(--ok-bg);
+    color: var(--ok);
+    border-color: transparent;
+  }
+
+  .loopnote {
+    margin: 4px 0 0 48px;
+    padding: 8px 12px;
+    border-left: 2px solid var(--line);
+    color: var(--muted);
+    font-size: 13.5px;
+  }
+
+  .cards { display: grid; gap: 14px; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .card.warn { background: var(--warn-bg); border-color: transparent; }
+  .card-title { font-weight: 600; margin: 0 0 6px; }
+  .card.warn .card-title { color: var(--warn); }
+  .card p { margin: 0; font-size: 14px; color: var(--muted); }
+  .card p + p { margin-top: 8px; }
+  .card p b { color: var(--text); font-weight: 600; }
+  .card.warn p { color: var(--text); opacity: .85; }
+  .card.warn p b { font-weight: 600; }
+  code {
+    font-family: var(--mono);
+    font-size: 13px;
+    background: color-mix(in srgb, var(--text) 6%, transparent);
+    border-radius: 3px;
+    padding: 1px 5px;
+  }
+  .card.warn code { background: color-mix(in srgb, var(--warn) 12%, transparent); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; font-size: 13px; }
+  tr:last-child td { border-bottom: none; }
+  td.tag { white-space: nowrap; color: var(--muted); font-family: var(--mono); font-size: 12.5px; }
+
+  footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13.5px; }
+  footer code { font-family: var(--mono); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>graph 引擎的 SOP</h1>
+    <p class="sub">一次 <code>GraphEngine.run()</code> 的标准作业流程 —— 九步一条环，其中两处顺序是承重的。</p>
+  </header>
+
+  <h2>九步</h2>
+  <div class="flow">
+    <div class="step start">
+      <div class="num">①</div>
+      <div class="body">
+        <div class="name">数轮数</div>
+        <div class="desc">进 while 前先 <code>step += 1</code>。计数在动作之前，所以 <b>step 永远等于"已进行的轮数"</b>，掉出循环时它正好是 max_steps。</div>
+      </div>
+    </div>
+
+    <div class="step load">
+      <div class="num">②</div>
+      <div class="body">
+        <div class="name">盖脚印<span class="badge">必须在 ⑤ 之前</span></div>
+        <div class="desc"><code>state["current_node"] = current</code>。节点和 router 都只拿得到 state、拿不到 <code>current</code>，所以这个键是它们唯一知道"自己是谁"的途径。</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">③</div>
+      <div class="body">
+        <div class="name">visits+1</div>
+        <div class="desc">按节点累加。这是护栏一的账本，和全局的 max_steps 分开记。</div>
+      </div>
+    </div>
+
+    <div class="step load">
+      <div class="num">④</div>
+      <div class="body">
+        <div class="name">查护栏一<span class="badge">必须在 ⑤ 之前</span></div>
+        <div class="desc"><code>if visits[current] &gt; max_visits: 返回失败</code>。<b>先判越界，再执行</b> —— 所以"第 2 次访问被拦下"时，节点实际只跑过 1 次。</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">⑤</div>
+      <div class="body">
+        <div class="name">跑节点</div>
+        <div class="desc"><code>patch = nodes[current](state)</code>。读整块板，只返回自己要加的那几行。</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">⑥</div>
+      <div class="body">
+        <div class="name">合并</div>
+        <div class="desc"><code>state.update(patch)</code>。合并前先查键碰撞 —— 同一个键被两个节点写过就报错，这是给并行留的。</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">⑦</div>
+      <div class="body">
+        <div class="name">问 router</div>
+        <div class="desc"><code>nxt = router(state)</code>。它<b>不接收 current</b>，只能读板上已经写下的东西。这一句就是 graph 和 loop 的全部分歧。</div>
+      </div>
+    </div>
+
+    <div class="step exit">
+      <div class="num">⑧</div>
+      <div class="body">
+        <div class="name">None 就收工</div>
+        <div class="desc"><code>if nxt is None: return ok</code>。对应 loop 的 <code>end_turn</code> —— 但决定权在代码手里，不在模型手里。</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">⑨</div>
+      <div class="body">
+        <div class="name">换 current</div>
+        <div class="desc"><code>current = nxt</code>，然后回 ①。这一句是整张图唯一的回边 —— 也是 A→B→A 那种图存在的唯一原因。</div>
+      </div>
+    </div>
+  </div>
+  <div class="loopnote">掉出 while 只有一种情况：④ 和 ⑧ 都没拦住，step 用满。这条出口报 max_steps，不能报成 max_visits。</div>
+
+  <h2>两处承重</h2>
+  <div class="cards">
+    <div class="card warn">
+      <p class="card-title">② 挪到 ⑤ 后面，节点就成了瞎子</p>
+      <p>节点想写"我这次干了什么"时读不到 <code>current_node</code>，router 更读不到。后果不是报错，是<b>悄悄走错边</b> —— 同一张图每次都走同一条路，看起来"能跑"，其实 router 在猜。</p>
+    </div>
+    <div class="card warn">
+      <p class="card-title">④ 挪到 ⑤ 后面，护栏就变成了事后通知</p>
+      <p>节点会先执行完第 4 次，再被告知"你超了"。对纯函数无所谓，对带副作用的节点就是<b>多做了一次不该做的事</b> —— 和 loop 里那个孤儿副作用同一类病。</p>
+    </div>
+  </div>
+
+  <h2>和 loop 对照</h2>
+  <table>
+    <thead>
+      <tr><th>步骤</th><th>loop</th><th>graph</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="tag">谁来干活</td><td>调一次 provider.chat</td><td>跑一个 node 函数</td></tr>
+      <tr><td class="tag">谁来定下一步</td><td>模型的 stop_reason</td><td>router(state) 的返回值</td></tr>
+      <tr><td class="tag">正常收工</td><td>end_turn</td><td>router 返回 None</td></tr>
+      <tr><td class="tag">护栏</td><td>只有 max_steps 一道</td><td>max_steps + max_visits 两道，各记各的账</td></tr>
+      <tr><td class="tag">回边</td><td>固定：调完工具回 chat</td><td>任意：current = router 说的那个</td></tr>
+    </tbody>
+  </table>
+
+  <footer>
+    对应实现：<code>src/pop_engine/graph.py</code> · 反向验收：<code>tests/test_graph.py</code> 的 <code>test_max_visits_names_the_node_and_the_count</code>
+  </footer>
+
+</div>
+</body>
+</html>

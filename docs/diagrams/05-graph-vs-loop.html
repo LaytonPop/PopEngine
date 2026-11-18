@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>loop 与 graph：同一个 while，两条决断</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --surface: #f7f7f5;
+    --line: #e3e2dd;
+    --text: #24241f;
+    --muted: #73726c;
+    /* loop 用琥珀，graph 用紫 */
+    --lp: #BA7517;
+    --lp-bg: #FAEEDA;
+    --gp: #534AB7;
+    --gp-bg: #EEEDFE;
+    --ok: #0F6E56;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #191918;
+      --surface: #232322;
+      --line: #34342f;
+      --text: #e8e7e1;
+      --muted: #9c9a92;
+      --lp: #FAC775;
+      --lp-bg: #412402;
+      --gp: #CECBF6;
+      --gp-bg: #26215C;
+      --ok: #9FE1CB;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 44px 24px 72px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; }
+  h1 { font-size: 25px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 8px; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  code { font-family: var(--mono); font-size: 13px; background: color-mix(in srgb, var(--text) 6%, transparent); border-radius: 3px; padding: 1px 5px; }
+
+  .banner {
+    border: 1px solid var(--line);
+    background: var(--surface);
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 13.5px;
+    color: var(--muted);
+    margin-bottom: 24px;
+  }
+  .banner b { color: var(--text); font-weight: 600; }
+
+  .controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+  .controls .spacer { margin-left: auto; }
+  button {
+    font-family: var(--sans);
+    font-size: 13px;
+    padding: 7px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+  button:hover:not(:disabled) { background: color-mix(in srgb, var(--text) 7%, transparent); }
+  button:disabled { opacity: .4; cursor: default; }
+  button.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
+  button.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--text) 85%, var(--bg)); }
+  .progress { font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+
+  .col { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface); }
+  .col-head {
+    display: flex; align-items: baseline; gap: 8px;
+    padding: 12px 16px; border-bottom: 1px solid var(--line);
+  }
+  .col-head .eng { font-weight: 600; font-size: 15px; }
+  .col.lp .col-head { background: var(--lp-bg); }
+  .col.lp .col-head .eng, .col.lp .col-head .who { color: var(--lp); }
+  .col.gp .col-head { background: var(--gp-bg); }
+  .col.gp .col-head .eng, .col.gp .col-head .who { color: var(--gp); }
+  .col-head .who { font-size: 12.5px; margin-left: auto; font-family: var(--mono); }
+
+  .code { padding: 10px 0; font-family: var(--mono); font-size: 12.5px; line-height: 1.85; overflow-x: auto; background: var(--bg); }
+  .code .ln { padding: 0 14px; white-space: pre; color: var(--muted); border-left: 2px solid transparent; transition: background .18s, color .18s, border-color .18s; }
+  .col.lp .code .ln.hl { background: color-mix(in srgb, var(--lp) 14%, transparent); border-left-color: var(--lp); color: var(--text); }
+  .col.gp .code .ln.hl { background: color-mix(in srgb, var(--gp) 14%, transparent); border-left-color: var(--gp); color: var(--text); }
+  .code .cm { opacity: .65; }
+
+  .narr { padding: 12px 16px 14px; font-size: 13.5px; border-top: 1px solid var(--line); background: var(--bg); min-height: 74px; }
+  .narr .tag { font-family: var(--mono); font-size: 12px; color: var(--muted); display: block; margin-bottom: 3px; }
+  .narr b { font-weight: 600; }
+
+  h2 { font-size: 12.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 40px 0 14px; }
+
+  .tally { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .tally .r { display: grid; grid-template-columns: 1.4fr 1fr 1fr; align-items: center; border-bottom: 1px solid var(--line); }
+  .tally .r:last-child { border-bottom: none; }
+  .tally .r.head { background: var(--surface); font-size: 12.5px; color: var(--muted); }
+  .tally .c { padding: 10px 16px; font-family: var(--mono); font-size: 13px; }
+  .tally .c.k { font-family: var(--sans); font-size: 13.5px; color: var(--muted); }
+  .tally .c.v { font-size: 17px; font-variant-numeric: tabular-nums; transition: color .2s; }
+  .tally .c.v.lp { color: var(--lp); }
+  .tally .c.v.gp { color: var(--gp); }
+  .tally .c.v.bump { color: var(--text); }
+
+  .verdict {
+    margin-top: 18px; padding: 14px 18px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--surface);
+    font-size: 13.5px; color: var(--muted);
+    opacity: .45; transition: opacity .35s;
+  }
+  .verdict.on { opacity: 1; }
+  .verdict b { color: var(--text); font-weight: 600; }
+
+  footer { margin-top: 44px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>同一个 while，两条决断</h1>
+    <p class="sub">左边 loop、右边 graph，按<b>同一条时间轴</b>同步走 —— 每一格是<b>一次模型调用</b>。看谁在这条轴上迈了「一圈」。</p>
+  </header>
+
+  <div class="banner">
+    <b>数字的来源：</b>模型调用 6 次、工具调用 10 次取自 <code>docs/evidence/m2-run-ok.jsonl</code> 的真实结构；
+    graph 那侧的节点切分是为演示编的，<b>不是实验结果</b>。这里要看清的是两条控制流的形状差异，不是成绩。
+  </div>
+
+  <div class="controls">
+    <button id="next" class="primary">下一步</button>
+    <button id="auto">自动</button>
+    <button id="reset">重置</button>
+    <span class="spacer"></span>
+    <span class="progress" id="prog">0 / 7</span>
+  </div>
+
+  <div class="grid">
+    <div class="col lp">
+      <div class="col-head">
+        <span class="eng">loop</span>
+        <span class="who">谁说了算：模型</span>
+      </div>
+      <div class="code" id="codeLp"></div>
+      <div class="narr"><span class="tag" id="tagLp">未开始</span><span id="narrLp"></span></div>
+    </div>
+
+    <div class="col gp">
+      <div class="col-head">
+        <span class="eng">graph</span>
+        <span class="who">谁说了算：router</span>
+      </div>
+      <div class="code" id="codeGp"></div>
+      <div class="narr"><span class="tag" id="tagGp">未开始</span><span id="narrGp"></span></div>
+    </div>
+  </div>
+
+  <h2>同一根轴上，账不一样</h2>
+  <div class="tally">
+    <div class="r head">
+      <div class="c k">指标</div>
+      <div class="c">loop</div>
+      <div class="c">graph</div>
+    </div>
+    <div class="r">
+      <div class="c k">model_calls</div>
+      <div class="c v lp" id="tLpCalls">0</div>
+      <div class="c v gp" id="tGpCalls">0</div>
+    </div>
+    <div class="r">
+      <div class="c k">steps<span style="opacity:.6">（各自口径）</span></div>
+      <div class="c v lp" id="tLpSteps">0</div>
+      <div class="c v gp" id="tGpSteps">0</div>
+    </div>
+    <div class="r">
+      <div class="c k">工具调用 / router 决策</div>
+      <div class="c v lp" id="tLpTools">0</div>
+      <div class="c v gp" id="tGpRouters">0</div>
+    </div>
+  </div>
+
+  <div class="verdict" id="verdict">
+    <b>跑到最后一格</b>你会看到：<b>model_calls 完全一样</b>，steps 却是 6 比 3。
+    graph 并没有少问模型 —— 它只是把同一串调用<b>切成了三段</b>。
+    要真少问，只能靠 router 比模型更早说「够了」。这就是 M3 要测的那件事。
+  </div>
+
+  <footer>
+    实现：<code>src/pop_engine/loop.py</code> · <code>src/pop_engine/graph.py</code><br>
+    loop 的 steps 恒等于 model_calls（每圈恰好一次模型调用）；graph 的 steps 是节点执行次数 —— 同名不同义，表头必须写清。
+  </footer>
+
+</div>
+
+<script>
+const LP_LINES = [
+  'for step in range(1, max_steps + 1):',
+  '    response = provider.chat(messages, specs)',
+  '    messages.append(response.message)',
+  '    if response.stop_reason == "end_turn":  return ok',
+  '    if response.stop_reason == "unknown":   return failed(error)',
+  '    for call in response.message.tool_calls:',
+  '        result = self.tools.invoke(call)',
+  '        messages.append(Message(role="tool", ...))',
+  'return failed(max_steps)'
+];
+const GP_LINES = [
+  'while step < max_steps:',
+  '    step += 1',
+  '    state["current_node"] = current',
+  '    visits[current] += 1',
+  '    if visits[current] > max_visits:  return failed(...)',
+  '    patch = nodes[current](state)',
+  '    state.update(patch)',
+  '    nxt = router(state)',
+  '    if nxt is None:  return ok',
+  '    current = nxt',
+  'return failed(max_steps)'
+];
+
+const FRAMES = [
+  {
+    tag: '起点',
+    lp: { lines: [], narr: 'messages 里只有你那一句 prompt。一步都还没走。', calls: 0, steps: 0, tools: 0 },
+    gp: { lines: [], narr: '白板 state 里只有 prompt，<code>current = "scan"</code>。', calls: 0, steps: 0, routers: 0 }
+  },
+  {
+    tag: '第 1 次模型调用',
+    lp: { lines: [1, 5, 6], narr: '问模型 → 它要 <code>list_dir</code> → 跑掉。messages 涨到 3 条。<b>loop 把这一次调用算作 1 步。</b>', calls: 1, steps: 1, tools: 1 },
+    gp: { lines: [5], narr: '节点 <code>scan</code> 内部问了一次模型，同样要 <code>list_dir</code>。<b>节点还没收工，所以 graph 一步都没走。</b>', calls: 1, steps: 0, routers: 0 }
+  },
+  {
+    tag: '第 2 次模型调用',
+    lp: { lines: [1, 5, 6], narr: '又要两个 <code>list_dir</code>。messages 6 条，2 步。', calls: 2, steps: 2, tools: 3 },
+    gp: { lines: [5], narr: '<code>scan</code> 内部第 2 次调用。外面看，轮数一点没动。', calls: 2, steps: 0, routers: 0 }
+  },
+  {
+    tag: '第 3 次模型调用',
+    lp: { lines: [1, 5, 6], narr: '三个 <code>list_dir</code> —— <b>就是那次 19.2 秒的调用</b>，占了整个 run 75% 的时间。loop 照样把它算作 1 步。', calls: 3, steps: 3, tools: 6 },
+    gp: { lines: [5, 7, 9], narr: '<code>scan</code> 这次 <code>end_turn</code> 了 → 写 <code>top_dirs</code> → <b>router 读白板，说下一个去 "read"</b>。graph 走完了第 1 步。<br><b>loop 里没有这个时刻</b> —— 它不知道「一个阶段结束了」。', calls: 3, steps: 1, routers: 1 }
+  },
+  {
+    tag: '第 4 次模型调用',
+    lp: { lines: [1, 5, 6], narr: '两个 <code>read_file</code>。4 步。', calls: 4, steps: 4, tools: 8 },
+    gp: { lines: [5], narr: '节点 <code>read</code> 第 1 次调用。', calls: 4, steps: 1, routers: 0 }
+  },
+  {
+    tag: '第 5 次模型调用',
+    lp: { lines: [1, 5, 6], narr: '两个 <code>list_dir</code>。5 步，10 次工具用完。', calls: 5, steps: 5, tools: 10 },
+    gp: { lines: [5, 7, 9], narr: '<code>read</code> 收工 → 写 <code>entrypoints</code> → router 说去 "report"。第 2 步。', calls: 5, steps: 2, routers: 2 }
+  },
+  {
+    tag: '第 6 次模型调用',
+    lp: { lines: [1, 3], narr: '<b>模型说 <code>end_turn</code></b> → 收工。6 次调用 = 6 步，一个不多一个不少。', calls: 6, steps: 6, tools: 10 },
+    gp: { lines: [5, 7, 8], narr: '<code>report</code> 收工、写 <code>final_text</code> → <b>router 返回 <code>None</code></b> → 收工。6 次调用，只走了 <b>3 步</b>。', calls: 6, steps: 3, routers: 3 }
+  }
+];
+
+let idx = -1, timer = null;
+const $ = id => document.getElementById(id);
+
+function buildCodes() {
+  $('codeLp').innerHTML = LP_LINES.map((l, i) => '<div class="ln" data-i="' + i + '">' + esc(l) + '</div>').join('');
+  $('codeGp').innerHTML = GP_LINES.map((l, i) => '<div class="ln" data-i="' + i + '">' + esc(l) + '</div>').join('');
+}
+function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function hl(sel, lines) {
+  document.querySelectorAll(sel + ' .ln').forEach(el => {
+    el.classList.toggle('hl', lines.indexOf(Number(el.dataset.i)) >= 0);
+  });
+}
+
+function render() {
+  if (idx < 0) {
+    $('tagLp').textContent = '未开始';
+    $('tagGp').textContent = '未开始';
+    $('narrLp').innerHTML = '按「下一步」开始。左边每迈一格是一圈，右边每迈一格是一次模型调用。';
+    $('narrGp').innerHTML = '两边按<b>模型调用次数</b>对齐，所以能直接看出谁在这一格「走完了一圈」。';
+    hl('#codeLp', []); hl('#codeGp', []);
+    $('tLpCalls').textContent = '0'; $('tLpSteps').textContent = '0'; $('tLpTools').textContent = '0';
+    $('tGpCalls').textContent = '0'; $('tGpSteps').textContent = '0'; $('tGpRouters').textContent = '0';
+    $('prog').textContent = '0 / ' + FRAMES.length;
+    $('verdict').classList.remove('on');
+    return;
+  }
+  const f = FRAMES[idx];
+  $('tagLp').textContent = f.tag;
+  $('tagGp').textContent = f.tag;
+  $('narrLp').innerHTML = f.lp.narr;
+  $('narrGp').innerHTML = f.gp.narr;
+  hl('#codeLp', f.lp.lines);
+  hl('#codeGp', f.gp.lines);
+
+  setNum('tLpCalls', f.lp.calls); setNum('tLpSteps', f.lp.steps); setNum('tLpTools', f.lp.tools);
+  setNum('tGpCalls', f.gp.calls); setNum('tGpSteps', f.gp.steps); setNum('tGpRouters', f.gp.routers);
+
+  $('prog').textContent = (idx + 1) + ' / ' + FRAMES.length;
+  $('verdict').classList.toggle('on', idx === FRAMES.length - 1);
+  $('next').disabled = idx >= FRAMES.length - 1;
+}
+
+function setNum(id, v) {
+  const el = $(id);
+  const changed = el.textContent !== String(v);
+  el.textContent = v;
+  if (changed) {
+    el.classList.add('bump');
+    setTimeout(() => el.classList.remove('bump'), 260);
+  }
+}
+
+function stopAuto() {
+  if (timer) { clearInterval(timer); timer = null; $('auto').textContent = '自动'; }
+}
+
+$('next').onclick = () => {
+  if (idx < FRAMES.length - 1) { stopAuto(); idx += 1; render(); }
+};
+$('reset').onclick = () => { stopAuto(); idx = -1; render(); };
+$('auto').onclick = () => {
+  if (timer) { stopAuto(); return; }
+  if (idx >= FRAMES.length - 1) idx = -1;
+  $('auto').textContent = '暂停';
+  timer = setInterval(() => {
+    if (idx < FRAMES.length - 1) { idx += 1; render(); }
+    else stopAuto();
+  }, 1400);
+};
+
+buildCodes();
+render();
+</script>
+</body>
+</html>

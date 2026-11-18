@@ -1,12 +1,15 @@
 # 三层世界速查：同一份数据，两种长相
 
-这里放三样东西，解决同一个问题——**我们的类型、线上协议、和中间那层转换，到底各长什么样**。
+这里放两类东西：**协议长什么样**（01–03 + 下面那张表），和**引擎怎么跑**（04–06）。
 
 | 看什么 | 看哪 | 回答什么问题 |
 | --- | --- | --- |
 | 数据怎么流过去、什么时候变形 | [01-run-sequence.html](./01-run-sequence.html) | 一张图看完一次 run，变形只发生在两条竖线上 |
 | 进来的时候哪几步会出错 | [02-from-wire.html](./02-from-wire.html) | 五道关卡，每一关都可能拿到垃圾，每一关都不许抛 |
 | 一次 run 的状态机 | [03-run-lifecycle.html](./03-run-lifecycle.html) | loop 的岔口只有 `end_turn` 一个；`stop_reason` 与 `tool_calls` 对不上的响应进不来（§七） |
+| graph 一次 run 的九个步骤 | [04-graph-sop.html](./04-graph-sop.html) | SOP 是哪九步；其中**两处顺序不能换**，换了不报错、只是悄悄错 |
+| loop 与 graph 并排跑 | [05-graph-vs-loop.html](./05-graph-vs-loop.html) | 同一个 while，谁回答「还要继续」；同一串模型调用，两边怎么记成不同的 `steps` |
+| agent 三层怎么摆 | [06-agent-three-layers.html](./06-agent-three-layers.html) | `loop + graph + harness` 不是加法：前两者可嵌套，第三个是横切面。论证与口径修正的 owner 是 [`design/三层与两轴.md`](../design/三层与两轴.md)，这张图只是它的可视化 |
 | 同一个东西在两边分别长什么样 | 下面这张表 | 左边是 Python，右边是真 JSON（从 `tests/fixtures/` 抄的，不是编的） |
 
 ---
