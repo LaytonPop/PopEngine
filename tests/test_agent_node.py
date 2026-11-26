@@ -17,13 +17,14 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from fakes import ScriptedProvider, assistant_text
+from fakes import ScriptedProvider, assistant_text, assistant_tool_calls
 
 from pop_engine.graph import GraphEngine, agent_node
 from pop_engine.graph.types import SUB_RUN_KEY
 from pop_engine.loop import AgentLoop
 from pop_engine.metrics import summarize
 from pop_engine.tools import ToolRegistry
+from pop_engine.types import ToolCall
 
 
 def _loop(*script: Any) -> AgentLoop:
@@ -226,3 +227,42 @@ def test_sub_run_key_must_hold_a_run_result() -> None:
 
     with pytest.raises(TypeError, match="RunResult"):
         GraphEngine({"a": bad}, lambda state: None, entry="a").run("任务")
+
+
+# ------------------------------------------------------------------ 假绿：子 run 失败不许报 ok
+def test_failed_subrun_makes_the_whole_graph_fail() -> None:
+    """子 run 失败 → 整图 failed，而不是路由走完报 ok。
+
+    原症状（三次真跑全部命中）：report 节点撞 max_steps，`final_text` 是空串，
+    而 `GraphEngine.run()` 返回 `status="ok"`。**对比表上会显示"跑通了"，只是内容全空。**
+    这种假绿比报错危险 —— 报错会让人去看，假绿会让人继续往下走。
+    """
+    # max_steps=1 + 第 1 次就要工具 → 子 run failed/max_steps
+    loop = AgentLoop(
+        ScriptedProvider(
+            [assistant_tool_calls(ToolCall(id="c1", name="不存在的工具", arguments={}))]
+        ),
+        ToolRegistry([]),
+        max_steps=1,
+    )
+    node = agent_node(loop, "p", "out")
+
+    result = GraphEngine({"scan": node}, lambda state: None, entry="scan").run("任务")
+
+    assert result.status == "failed"
+    assert result.stop_reason == "error"
+    assert "scan" in (result.error or "")
+    assert "max_steps" in (result.error or "")
+
+
+def test_successful_graph_still_reports_ok() -> None:
+    """对照组：子 run 都成功时，图必须还是 ok。
+
+    没有这条，上一条可以通过"永远报 failed"来作弊。
+    """
+    node = agent_node(_loop(), "p", "out")
+
+    result = GraphEngine({"scan": node}, lambda state: None, entry="scan").run("任务")
+
+    assert result.status == "ok"
+    assert result.error is None

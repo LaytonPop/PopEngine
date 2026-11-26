@@ -125,6 +125,18 @@ class GraphEngine:
         # current_node 是引擎自己的键，先占上，节点写它会撞车。
         owners: dict[str, str] = {"current_node": "<engine>"}
 
+        # 子 run 失败账本：节点名 → 原因。
+        #
+        # 为什么引擎要管这件事：`agent_node` 把子 run 的 RunResult 交给引擎，
+        # 引擎如果只看 router 的话，**子 run 失败时图照样往下走、最后报 ok**。
+        # 实测踩过：report 节点 max_steps=1 撞线 → final_text 是空串，
+        # 三个图里三次都这样，而每一次 `status` 都是 "ok"。
+        # 这种"假绿"比报错危险得多 —— 对比表上会显示"跑通了"，只是内容全空。
+        #
+        # 取向是 fail-closed：默认子 run 失败就是整图失败。
+        # 将来要"某个节点允许失败、由 router 绕开"，再显式加配置，不要默认放宽。
+        subrun_failures: dict[str, str] = {}
+
         current = self.entry  # 初始状态：状态机停在入口节点
         step = 0  # 已执行的轮数；终止性只依赖它
 
@@ -155,6 +167,10 @@ class GraphEngine:
                 events.extend(replace(event, node=current) for event in subrun.events)
                 if subrun.messages:
                     last_messages = subrun.messages
+                if subrun.status != "ok":
+                    subrun_failures[current] = f"{subrun.stop_reason}" + (
+                        f"（{subrun.error}）" if subrun.error else ""
+                    )
 
             stolen = [key for key in patch if key in owners and owners[key] != current]
             if stolen:
@@ -170,6 +186,14 @@ class GraphEngine:
             if nxt is None:
                 # 接受条件：结构说收工。对应 loop 的 end_turn，
                 # 但决定权在 router（代码）手里，不在模型手里。
+                #
+                # 但"结构走完了"不等于"活干成了"：只要有节点里的子 run 失败过，
+                # 这里就不能报 ok。实测的原症状是——三次图全部 status=ok，
+                # 而 final_text 是空串，原因是最末一个节点的子 run 撞了预算。
+                # 一张图"跑完了但什么都没产出"，报 ok 就是假绿。
+                if subrun_failures:
+                    who = "、".join(f"{name}（{why}）" for name, why in subrun_failures.items())
+                    return failed(f"节点 {who} 的子 run 没跑完，图走完了但没有可靠产出")
                 return finish(
                     status="ok",
                     stop_reason="end_turn",
