@@ -126,7 +126,13 @@ class StepEvent:
       kind == "model"        → stop_reason / duration_ms / error
       kind == "tool_start"   → tool_name / tool_call_id
       kind == "tool_end"     → tool_name / tool_call_id / is_error / duration_ms
-    用不到的字段留 None，不做联合类型 —— 八个字段还没多到值得拆。
+    用不到的字段留 None，不做联合类型 —— 九个字段还没多到值得拆。
+
+    `node` 是给 graph 用的（M3 加的，纯增量，loop 永远是 None）：
+    一个 graph 节点里可能跑一整轮子 run，子 run 的事件必须能被认出
+    "是哪个节点产生的"。**靠字段归属，不靠给 step 加偏移** ——
+    两套编号拼在一起，`step` 就同时表示两种东西；换个字段，
+    `step` 在两边都还是一个意思（第几次模型调用，节点内重新从 1 数）。
     """
 
     kind: EventKind
@@ -140,6 +146,7 @@ class StepEvent:
     is_error: bool | None = None
 
     error: str | None = None
+    node: str | None = None  # 产生这条事件的 graph 节点名；loop 里恒为 None
 
 
 @dataclass(frozen=True)
