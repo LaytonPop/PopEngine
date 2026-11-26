@@ -16,11 +16,16 @@
 
 - [x] M0 阶段 0：一页纸 + 仓库骨架
 - [x] M1 假数据跑通 loop（2026-10-27：11 个测试全绿）
-- [ ] M2 接真模型（OpenAI 兼容 / DeepSeek）+ 真实任务 ← **当前**
+- [x] M2 接真模型（OpenAI 兼容 / DeepSeek）+ 真实任务
   - [x] 转换层 `openai_compat.py`（2026-10-29：18 个测试全绿）
-  - [ ] 接线真跑 · 真工具 · events.jsonl
-- [ ] M3 graph 引擎跑同一任务
+  - [x] 接线真跑 · 真工具 · events.jsonl（`traces/` 留档可回放）
+- [x] M3 graph 引擎（`graph/` 包：引擎 + 契约 + `agent_node`，`max_visits` + `max_steps` 双护栏）
+  - [x] `agent_node` 把一次 `AgentLoop.run()` 包成节点 —— 图包裹循环，不替代它
+  - [x] 子 run 的 `StepEvent` 带 `node` 标签并进父 run，三个指标从事件算得出来
+- [ ] M3 **跑同一任务**：同任务同模型，loop / graph 各跑 3 次，把 `model_calls` 并排放 ← **当前**
 - [ ] M4 《loop vs graph》对比 + 面试讲稿
+
+**测试现状**：`uv run pytest` → 65 passed（无需 API Key，假 Provider + 假工具）。
 
 **待办清单（唯一入口）：[`docs/TODO.md`](docs/TODO.md)** ← 每次开工先看这个
 
