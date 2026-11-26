@@ -27,15 +27,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
-from typing import Any
+from collections.abc import Mapping
+from dataclasses import replace
+from typing import Any, Literal
 
-from pop_engine.types import Message, RunResult, RunStopReason
+from pop_engine.graph.types import SUB_RUN_KEY, NodeFn, RouterFn
+from pop_engine.types import Message, RunResult, RunStopReason, StepEvent
 
-# 下面两个是**不变的契约**：节点和 router 的形状。
-# M3 期间它们不动；真正随 run 变化的是 run() 里的五样局部状态（见那里）。
-NodeFn = Callable[[dict[str, Any]], dict[str, Any]]
-RouterFn = Callable[[dict[str, Any]], str | None]
+# NodeFn / RouterFn 只有一份定义，在 graph/types.py —— 这里不再重定义一份。
+# 同一个契约写两遍就是两个来源，迟早分叉（见 design/引擎对比.md §七补记）。
 
 
 class GraphEngine:
@@ -69,20 +69,57 @@ class GraphEngine:
     def run(self, prompt: str) -> RunResult:
         """执行一次有界图遍历 —— M3 里 graph 引擎的算法本体。
 
-        
+        ── 子 run 的事件怎么并进来（任务书 §5 坑 1 的答案）──
+
+        节点可以整轮跑一个 AgentLoop（见 agent_node.py）。子 run 的 `step`
+        从 1 开始，父 run 也有自己的轮次 —— 但这里**不给子事件加编号偏移**，
+        而是用 `StepEvent.node` 标出它属于哪个节点，然后按发生顺序拼进 `events`。
+
+        理由：加偏移会让 `step` 同时表示两种东西（节点内第几次 / 全局第几次），
+        以后任何人读这个字段都要先问"这是哪种编号"；加字段则 `step` 在两边
+        都还是一个意思，而"哪个节点产生的"是另一个问题，用另一个字段回答。
+
+        ── 三个数字从哪来 ──
+
+        `events` 是唯一的账本，`model_calls` / `total_ms` 全部由它算。
+        `steps` 沿用 `RunResult.steps` 原本的含义（调用了几次模型），
+        所以 graph 这边它也等于 `model_calls` —— 与 `metrics.summarize` 一致。
+        **"结构做了几次决策"是另一个量，要报就得另起名字（node_visits），
+        不要借用 steps。**（任务书 §7 那三个选项，这里选的是"保持一个含义"。）
         """
 
-        def failed(error: str, stop_reason: RunStopReason = "error") -> RunResult:
+        # 子 run 的现场：事件按发生顺序攒；messages 只留最后一次。
+        # 为什么 messages 只留最后一次：出问题时人先看最后一步，中途那些
+        # 留给 events（任务书 §5 坑 3）。没有 agent_node 的图里它保持初始值。
+        events: list[StepEvent] = []
+        last_messages: tuple[Message, ...] = (Message(role="user", content=prompt),)
+
+        def finish(
+            *,
+            status: Literal["ok", "failed"],
+            stop_reason: RunStopReason,
+            final_text: str = "",
+            error: str | None = None,
+        ) -> RunResult:
+            """所有出口共用：保证 events / messages / steps 三样一定被填上。
+
+            以前五个出口各自 new 一个 RunResult，谁漏了 events 都看不出来 ——
+            实测过一次：graph 跑完 `events=0`，三个指标全零，而 49 个测试全绿。
+            收成一个出口工厂，就不会再有"某一个分支忘了填"。
+            """
             return RunResult(
-                status="failed",
+                status=status,
                 stop_reason=stop_reason,
-                final_text="",
-                messages=(Message(role="user", content=prompt),),
-                steps=0,
+                final_text=final_text,
+                messages=last_messages,
+                steps=sum(1 for event in events if event.kind == "model"),
                 error=error,
+                events=tuple(events),
             )
 
-       
+        def failed(error: str, stop_reason: RunStopReason = "error") -> RunResult:
+            return finish(status="failed", stop_reason=stop_reason, error=error)
+
         state: dict[str, Any] = {"prompt": prompt}
         visits: dict[str, int] = {}
         # current_node 是引擎自己的键，先占上，节点写它会撞车。
@@ -92,22 +129,33 @@ class GraphEngine:
         step = 0  # 已执行的轮数；终止性只依赖它
 
         while step < self.max_steps:
-            
             step += 1
             state["current_node"] = current
             visits[current] = visits.get(current, 0) + 1
 
-            
             if visits[current] > self.max_visits:
-                
                 return failed(
                     f"节点 {current!r} 被访问 {visits[current]} 次，上限 {self.max_visits}"
                 )
 
-            
             patch = self.nodes[current](state)
 
-           
+            # 运输通道不是业务数据：先摘出来，不写进白板、也不登记 owners。
+            # 否则每个 agent_node 都会写同一个 `_subrun`，第二个就被判成撞键 ——
+            # 跟当初每个节点都写 `last_status` 是同一个病。
+            subrun = patch.pop(SUB_RUN_KEY, None)
+            if subrun is not None:
+                if not isinstance(subrun, RunResult):
+                    raise TypeError(
+                        f"节点 {current!r} 在 {SUB_RUN_KEY!r} 里放的不是 RunResult，"
+                        f"而是 {type(subrun).__name__} —— 这个键只给 agent_node 用"
+                    )
+                # 子事件带上节点名再拼进父 run：step 保持子 run 的原编号，
+                # 归属靠 node 字段，两套编号不用合并。
+                events.extend(replace(event, node=current) for event in subrun.events)
+                if subrun.messages:
+                    last_messages = subrun.messages
+
             stolen = [key for key in patch if key in owners and owners[key] != current]
             if stolen:
                 key = sorted(stolen)[0]
@@ -118,18 +166,15 @@ class GraphEngine:
             owners.update({key: current for key in patch})
             state.update(patch)
 
-            
             nxt = self.router(state)
             if nxt is None:
                 # 接受条件：结构说收工。对应 loop 的 end_turn，
                 # 但决定权在 router（代码）手里，不在模型手里。
-                return RunResult(
+                return finish(
                     status="ok",
                     stop_reason="end_turn",
                     # 图的最终回答约定写在 state["final_text"]；没这个键就是空串。
                     final_text=str(state.get("final_text", "")),
-                    messages=(Message(role="user", content=prompt),),
-                    steps=0,
                 )
             if nxt not in self.nodes:
                 # 拒绝条件：router 指到未知节点。当场失败 ——

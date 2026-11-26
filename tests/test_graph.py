@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from pop_engine.graph import GraphEngine
+from pop_engine.graph.engine import GraphEngine
 
 
 def _a(state: dict[str, Any]) -> dict[str, Any]:

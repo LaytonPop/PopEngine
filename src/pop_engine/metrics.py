@@ -1,4 +1,4 @@
-""" 从运行事件汇总指标，不依赖引擎控制流或文件格式"""
+"""从运行事件汇总指标，不依赖引擎控制流或文件格式"""
 
 from collections.abc import Sequence
 
@@ -20,5 +20,4 @@ def summarize(events: Sequence[StepEvent]) -> dict[str, float]:
 
     total_ms = sum((event.duration_ms or 0.0) for event in events)
 
-    return {"model_calls":model_calls,"total_ms":total_ms,"steps":model_calls}
-
+    return {"model_calls": model_calls, "total_ms": total_ms, "steps": model_calls}
