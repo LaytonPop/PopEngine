@@ -19,6 +19,16 @@ from typing import Any
 from pop_engine.types import LLMResponse, Message, ToolCall, ToolSpec
 
 
+def user_message(text: str) -> Message:
+    """用户说了一句话 —— `run()` 的入参要的就是这个消息序列。
+
+    和 `assistant_text` / `assistant_tool_calls` 同一族：只在这里造测试数据，
+    生产代码里不出现。有它，测试里 `run([user_message("你好")])` 才好读；
+    也正因为不放进生产代码，脚本里 `role="user"` 必须亲手写出来、看得见。
+    """
+    return Message(role="user", content=text)
+
+
 def assistant_text(text: str) -> LLMResponse:
     """模型说完了一句话，本轮结束。"""
     return LLMResponse(

@@ -53,6 +53,7 @@ def main() -> int:
     from pop_engine.llm.provider import OpenAIProvider
     from pop_engine.loop import AgentLoop
     from pop_engine.tools import ToolRegistry
+    from pop_engine.types import Message
 
     prompt = sys.argv[1] if len(sys.argv) > 1 else "你好，用一句话介绍你自己。"
 
@@ -60,7 +61,7 @@ def main() -> int:
     # 空注册表：第 1 段只走一问一答，模型没有工具可调。
     loop = AgentLoop(provider, ToolRegistry([]), max_steps=3)
 
-    result = loop.run(prompt)
+    result = loop.run([Message(role="user", content=prompt)])
 
     print("=" * 60)
     print(f"status      : {result.status}")

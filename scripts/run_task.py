@@ -223,10 +223,13 @@ def main(argv: list[str]) -> int:
     from pop_engine.loop import AgentLoop
     from pop_engine.tools import ToolRegistry
     from pop_engine.tools.builtin import ListDirTool, ReadFileTool
+    from pop_engine.types import Message
 
     # 工具锁定在被观察的仓库里：模型给的 path 只能在这个根下面活动。
     registry = ToolRegistry([ListDirTool(repo), ReadFileTool(repo)])
-    result = AgentLoop(OpenAIProvider(), registry, max_steps=8).run(TASK_PROMPT)
+    result = AgentLoop(OpenAIProvider(), registry, max_steps=8).run(
+        [Message(role="user", content=TASK_PROMPT)]
+    )
 
     problems, order, warnings = check_trace(result.messages)
 

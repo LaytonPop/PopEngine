@@ -24,6 +24,7 @@ from typing import Any
 
 from pop_engine.graph.types import SUB_RUN_KEY, NodeFn
 from pop_engine.loop import AgentLoop
+from pop_engine.types import Message
 
 # prompt 可以是一段固定文本，也可以是一个读黑板的函数。
 # 后者用来做重试：第二次 inspect 要把上一轮的问题和输出带进 prompt。
@@ -49,7 +50,7 @@ def agent_node(loop: AgentLoop, prompt: PromptBuilder, output_key: str) -> NodeF
         # 固定 prompt 直接用；函数 prompt 每次运行前读一遍黑板，
         # 这样重试时可以带上上一轮的 problems/draft。
         actual_prompt = prompt if isinstance(prompt, str) else prompt(state)
-        result = loop.run(actual_prompt)
+        result = loop.run([Message(role="user", content=actual_prompt)])
         return {
             output_key: result.final_text,
             f"{output_key}_status": result.status,

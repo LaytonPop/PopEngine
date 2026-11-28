@@ -206,12 +206,13 @@ def _tools_from_events(events: tuple[Any, ...]) -> list[str]:
 
 def run_once(engine: str, repo: Path, provider: Any) -> dict[str, Any]:
     from pop_engine.metrics import summarize
+    from pop_engine.types import Message
 
     target = build_loop(repo, provider) if engine == "loop" else build_graph(repo, provider)
     prompt = TASK_PROMPT if engine == "loop" else "判断这个仓库是什么项目"
 
     wall_started = time.perf_counter()
-    result = target.run(prompt)
+    result = target.run([Message(role="user", content=prompt)])
     wall_ms = round((time.perf_counter() - wall_started) * 1000, 2)
 
     metrics = summarize(result.events)

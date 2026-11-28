@@ -14,6 +14,7 @@ from fakes import (
     ScriptedProvider,
     assistant_text,
     assistant_tool_calls,
+    user_message,
 )
 
 from pop_engine.loop import AgentLoop
@@ -30,7 +31,7 @@ def test_a_end_turn_immediately() -> None:
     """模型一次就结束：循环跑一圈就退出，不再多调一次模型。"""
     provider = ScriptedProvider([assistant_text("你好，我是模型。")])
 
-    result = _loop(provider).run("你好")
+    result = _loop(provider).run([user_message("你好")])
 
     assert result.status == "ok"
     assert result.stop_reason == "end_turn"
@@ -66,7 +67,7 @@ def test_b_two_tool_calls_then_end_turn() -> None:
         ]
     )
 
-    result = _loop(provider).run("帮我算 1+2 和 10+20")
+    result = _loop(provider).run([user_message("帮我算 1+2 和 10+20")])
 
     assert result.status == "ok"
     assert result.stop_reason == "end_turn"
@@ -105,7 +106,7 @@ def test_c_stop_at_max_steps() -> None:
     ]
     provider = ScriptedProvider(forever)
 
-    result = _loop(provider, max_steps=3).run("永动机")
+    result = _loop(provider, max_steps=3).run([user_message("永动机")])
 
     assert result.status == "failed"
     assert result.stop_reason == "max_steps"
@@ -119,7 +120,7 @@ def test_d_provider_exception_is_captured() -> None:
     """模型层抛异常：循环不死，失败可读，现场保留。"""
     provider = ScriptedProvider([RuntimeError("connection reset by peer")])
 
-    result = _loop(provider).run("你好")
+    result = _loop(provider).run([user_message("你好")])
 
     assert result.status == "failed"
     assert result.stop_reason == "error"
@@ -145,7 +146,7 @@ def test_e_tool_failure_is_fed_back_and_loop_survives() -> None:
     )
     loop = AgentLoop(provider, ToolRegistry([AddTool(), BoomTool()]), max_steps=5)
 
-    result = loop.run("试试那个会炸的工具")
+    result = loop.run([user_message("试试那个会炸的工具")])
 
     assert result.status == "ok"  # 循环活着走完了
     assert result.steps == 2
@@ -186,7 +187,7 @@ def test_f_unknown_stop_reason_stops_immediately() -> None:
     )
     loop = AgentLoop(provider, ToolRegistry([AddTool()]), max_steps=8)
 
-    result = loop.run("随便问点什么")
+    result = loop.run([user_message("随便问点什么")])
 
     assert result.status == "failed"
     assert result.stop_reason == "error"
@@ -203,7 +204,7 @@ def test_g_end_turn_records_one_model_event() -> None:
     """
     provider = ScriptedProvider([assistant_text("你好。")])
 
-    result = _loop(provider).run("打个招呼")
+    result = _loop(provider).run([user_message("打个招呼")])
 
     assert len(result.events) == 1
     event = result.events[0]
@@ -229,7 +230,7 @@ def test_h_tool_call_records_start_and_end_in_order() -> None:
         ]
     )
 
-    result = _loop(provider).run("1 加 2 等于几")
+    result = _loop(provider).run([user_message("1 加 2 等于几")])
 
     assert [event.kind for event in result.events] == [
         "model",
@@ -259,7 +260,7 @@ def test_i_tool_failure_is_visible_as_is_error() -> None:
     )
     loop = AgentLoop(provider, ToolRegistry([AddTool(), BoomTool()]))
 
-    result = loop.run("试试那个会炸的工具")
+    result = loop.run([user_message("试试那个会炸的工具")])
 
     end = result.events[2]
     assert end.kind == "tool_end"
@@ -274,7 +275,7 @@ def test_j_provider_exception_still_records_an_event() -> None:
     """
     provider = ScriptedProvider([RuntimeError("connection reset by peer")])
 
-    result = _loop(provider).run("随便问问")
+    result = _loop(provider).run([user_message("随便问问")])
 
     assert len(result.events) == 1
     event = result.events[0]
@@ -303,7 +304,7 @@ def test_k_last_step_end_turn_still_succeeds() -> None:
     ]
     provider = ScriptedProvider(calls)
 
-    result = _loop(provider, max_steps=3).run("数到三")
+    result = _loop(provider, max_steps=3).run([user_message("数到三")])
 
     assert result.status == "ok"
     assert result.stop_reason == "end_turn"
@@ -339,7 +340,7 @@ def test_l_last_step_tool_use_leaves_an_orphan_side_effect() -> None:
     provider = ScriptedProvider([_count_call(i) for i in range(10)])
     loop = AgentLoop(provider, ToolRegistry([counter]), max_steps=3)
 
-    result = loop.run("一直数")
+    result = loop.run([user_message("一直数")])
 
     assert result.status == "failed"
     assert result.stop_reason == "max_steps"
@@ -375,7 +376,7 @@ def test_l2_orphan_side_effect_is_only_at_the_boundary() -> None:
     )
     loop = AgentLoop(provider, ToolRegistry([counter]), max_steps=5)
 
-    result = loop.run("数一次")
+    result = loop.run([user_message("数一次")])
 
     assert result.status == "ok"
     assert len(counter.calls) == 1

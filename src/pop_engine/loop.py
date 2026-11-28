@@ -16,6 +16,7 @@ M1 时的约束是「不加日志、不加事件」；M2 的 c 轮解冻了这�
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 
 from pop_engine.llm import LLMProvider
 from pop_engine.tools import ToolRegistry
@@ -46,7 +47,7 @@ class AgentLoop:
         self.tools = tools
         self.max_steps = max_steps
 
-    def run(self, prompt: str) -> RunResult:
+    def run(self, initial_messages: Sequence[Message]) -> RunResult:
         """跑完一轮，返回结局。
 
         必须满足的四件事（就是那 4 个测试）：
@@ -57,6 +58,26 @@ class AgentLoop:
              stop_reason="max_steps"，模型调用次数绝不超过 max_steps
           D. 模型抛异常 → 不往上冒，status="failed"，stop_reason="error"，
              error 里带上异常信息，已积累的 messages 保留
+
+        ── 入参形状（2026-11-28，M4 第 1 关 T0）──
+
+        参数是**完整现场**，不是"一句话"：`run` 不构造任何消息，连 user 都不造。
+        调用方负责把该说的话放进去 ——
+
+            首轮    run([Message(role="user", content="查这个仓库")])
+            续聊    run([*上次.messages, Message(role="user", content="第二个文件呢")])
+            续跑    run(上次.messages)      ← 原样送回，末尾是还没人读的 tool
+
+        **末尾必须是模型还没消费过的东西**：一条 `role="user"`，或一批没读的
+        `role="tool"`。旧版本靠 `messages[0]` 是不是 user 来判"起点对不对"，
+        现在那个保证没有了 —— 换成了这条更弱也更准的。
+
+        `run` **不校验**入参合法性（历史合不合法归 session 层，见 M4 第 3 关），
+        只挡一种情况：空入参。空的时候 `to_wire([])` 会静默返回 `[]`，
+        一路无声地发出去，直到 API 那边 400 —— 静默的空比当场报错难查得多。
+
+        `messages = list(initial_messages)` 那一步也不是顺手写的：它是
+        「不修改入参」这条不变量的**唯一实现**（调用方传进来的 list 跑完不变）。
 
         ── 预算语义（2026-11-12 钉死，M3 对比有效性的前提）──
 
@@ -77,11 +98,22 @@ class AgentLoop:
         用户中断、成本上限的检查时机和语义都不一样，各有各的规则，不能
         往同一张排序表里塞。这里只说了 end_turn 和步数预算这一对。
 
+        ── 交出去的那份现场（2026-11-28）──
+
+        `RunResult.messages` 是**到这次 run 结束为止的完整现场**，不是"本次新增"：
+        传进来的那部分原样在里面，后面接本次产生的。恢复要用的就是它，整份存整份喂。
+        所以别拿 `len(result.messages)` 当工作量看 —— 那不是进度条。
+
+        `steps` 则只算**本次**的模型调用次数，不跨 run 累计。两句话是一对：
+        现场是累积的，计数是本轮的。
+
         Q&A&sum:
             一个完整的数据模型包括：模型返回结果，用户传入的信息，工具返回结果
 
         """
-        messages = [Message(role="user", content=prompt)]
+        if not initial_messages:
+            raise ValueError("initial_messages 不能为空：run 不再替你造 user 消息")
+        messages = list(initial_messages)
 
         # 工具在一次 run 里不变，说明书只算一次。
         # 提到循环外不只是省几个列表推导 —— 它同时钉死了一件事：
