@@ -22,7 +22,7 @@
 - [x] M3 graph 引擎 + 同任务对比（2026-11-26：67 passed）
   - [x] `graph/` 包：引擎 + 契约 + `agent_node`，`max_visits` + `max_steps` 双护栏
   - [x] `agent_node` 把一次 `AgentLoop.run()` 包成节点 —— 图包裹循环，不替代它
-  - [x] 同任务同模型各跑 3 次，产出对比报告 [`docs/loop-vs-graph.md`](docs/loop-vs-graph.md)
+  - [x] 同任务同模型各跑 3 次，产出对比报告 [`docs/design/loop-vs-graph.md`](docs/design/loop-vs-graph.md)
 - [ ] M4 L2 机制层四关（对标 `KamaClaude@stage/s6` + `waku-agent` 真源码） ← **当前**
   - [ ] 第 1 关：循环薄参数（`before_model` / `should_stop`）+ 撞线禁工具
   - [ ] 第 2 关：4 层静态权限评估 + `PermissionGate` 装饰器 + `write_file` / `run_command`
