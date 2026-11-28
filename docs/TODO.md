@@ -14,14 +14,17 @@
 | M2 真模型 · 接线 + 真工具        | ✅ a/b 轮验收完成，回归 3/3 |
 | M2 事件（events.jsonl）          | ✅ c 轮完成（2026-11-10），29 passed |
 | M3 graph 引擎跑同一任务 + 对比    | ✅ 2026-11-26（67 passed） |
-| M4 README + 面试讲稿              | ⬜ 下一站    |
-| M5 生产化                         | ⬜ 未定，只有钩子（见下），M4 后再展开 |
+| M4 L2 机制层四关（完整化）        | 🚧 下一站（插槽 → 写工具+权限 → 会话恢复 → 压缩） |
+| M5 README + 面试讲稿              | ⬜ 四关过完后收口 |
 
 > 测试总数：**67 = loop 14 + openai_compat 13 + tools 4 + smoke 1 + metrics 6
 > + graph 11 + agent_node 18**。
 > 沿革：18（M2 转换层）→ 23（a 轮后）→ 25（b 轮）→ 29（c 轮补 4 条事件测试）
 > → 32（M3 前置补 3 条预算边界测试）→ 38（`metrics`）→ 49（`graph`）
 > → 65（`agent_node` + 事件通道）→ **67**（补「子 run 失败不许报 ok」+ 对照组）。
+>
+> M4 目标 **~104**，但注意：**第 1 关会作废 2 条旧测试的语义**（`test_c` / `test_l`），
+> 这不是「顺手改断言」，是改契约 —— 单独一次提交，正文写清为什么旧的孤儿副作用是 bug。
 
 ---
 
@@ -132,43 +135,57 @@
 > **还没测到的**（M3 之后想做，不阻塞 M4）：让 router 依赖模型写的 key
 > （`scan` 写 `enough: yes/no`）—— 那才是"代码规则 vs 模型自觉"在同一个位置上竞争。
 
-### M4：README + 面试讲稿
+### M4：L2 机制层四关（让引擎长出防线） 🚧
 
-> **口径（2026-11-12）**：M4 讲的是**这个初步引擎**，不是生产系统。
-> 讲稿里出现的每一句"能干什么"，都得能在 `M1–M3` 的代码里指到出处；
-> 生产化的事只提一句"知道缺什么、按什么顺序补"，细节留给 M5。
+> **2026-11-27 定版（照真源码，不再是推断）**：M1–M3 已把 L0（原子）、L1（loop）、L3（graph）焊牢（`67 passed`）。
+> 四关的具体切口全部改成对 `KamaClaude@stage/s6`、`waku-agent`、`opencode` 源码的对照 ——
+> 11-26 那版的 `hooks.py` 中间件框架、滑动窗口折叠、丢弃孤儿调用三处**已被真源码推翻**，理由见任务书 §〇。
+>
+> 详细切口、签名、不变量与反向验收见 **[`M4-任务书.md`](M4-任务书.md)**。
+> 总判据：**不按「有这个功能」验收，按「故意制造故障时它怎么拦」验收。**
 
-- [ ] README 补齐进度
-- [ ] 讲稿：loop vs graph、怎么调 agent（用那份失败记录）、为什么工具参数用 JSON Schema
+#### 第 1 关：循环三个薄参数 + 预算收尾
+- [ ] `loop.py` 加 `before_model: (step, messages) -> Sequence[Message]`（照 `waku/loop/agent.py:125`，只在 `step > 1` 调；**返回新序列不改入参**，原文留在 `RunResult`）
+- [ ] `loop.py` 加 `should_stop: (step, response, messages) -> str | None`，调用点在「append assistant 之后、执行工具之前」（护栏必须在动作之前）；`RunStopReason` 新增 `"stopped"`
+- [ ] **撞线禁工具**（改编 `waku/loop/agent.py:165-209`）：`step == max_steps` 时 `tool_specs` 传空，模型就地作答 → 不变量 `steps ≤ max_steps` 不动，孤儿副作用从成因上消失
+- [ ] 改 `loop.py` docstring 的「预算语义」一段 + 改写 `test_c` / `test_l`（旧语义作废，单独一次提交并说明理由）
+- [ ] `tests/test_hooks_loop.py`：零侵入回归、`before_model` 调用次数与「p 收到短的 / result 留长的」、`should_stop` 中止且工具零执行、撞线那次 `tool_specs == []`、不听话的模型硬要工具不执行
 
-### M5（未定）：生产化 —— 只留钩子，不写细节
+#### 第 2 关：权限网关 + 两个真能干活的工具
+- [ ] `tools/__init__.py`：`Tool` 协议加 `capability: "readonly" | "write" | "exec"` —— **不加进 `ToolSpec`**（说明书是给模型看的，能力是我们自己的元数据）
+- [ ] `src/pop_engine/permission.py`（新，单文件）：照 `KamaClaude/core/permissions/policy.py` 的 4 层 `evaluate`（deny_patterns → `OUTSIDE_CWD_HEURISTICS` 强制 ASK → allow_patterns → 工具默认），顺序不许调
+- [ ] `PermissionGate`（与 `ToolRegistry` 同形状的装饰器：`specs()` / `invoke()`）+ `approver` 回调处理 ASK；**不抄** `storage.py` 持久化与 pending-Future 双进程审批
+- [ ] `tools/builtin.py`：`write_file`（1MB 上限、`..` 拒绝、自动建父目录）+ `run_command`（64KB 截断、timeout 1–120 默认 60、stderr 合并、非零退出带 `[exit N]`）；**改同步 `subprocess.run`**，别抄 KamaClaude 的 asyncio
+- [ ] `tests/test_permission.py`：表驱动 4 层、拒绝时被拒工具执行次数 **0**、拒绝后模型自愈收尾、`..` 越界零字节、超时不挂死、`approver` 放行/拒绝
 
-> **为什么现在不展开**：M3 还没开工。此刻写一份详细的生产化计划，
-> 就是拿文档的勤奋去透支代码的信用 —— 那两份锐评骂的正是这个病，只不过这次是自己骂自己。
-> **等 M4 结束再展开**，那时才知道哪些结论站得住。
-> 这个钩子现在只干一件事：**把判据定下来**，防止它将来长成一张功能清单。
+#### 第 3 关：会话持久化 + 真·断点恢复
+- [ ] `session.py`（新，单文件）：`message_to_dict` / `message_from_dict` **无损往返**（保住 `tool_calls` 元组与 `raw_arguments`）+ `SessionStore` 追加写 `thread.jsonl` / `meta.json`
+- [ ] `loop.py` 加两个入口：构造器 `on_message: Callable[[Message], None]`（在 user/assistant/tool **三处 append 之后立刻调**）+ `run(prompt, *, history=...)`
+- [ ] **孤儿补齐优先、回滚兜底**（与 `KamaClaude` 的 `_trim_orphan_tool_use` 刻意不同）：给「有请求无回执」的 `tool_call_id` 补合成回执（「结果未知，副作用可能已发生」），只在末尾 assistant 本身残缺时才回滚
+- [ ] `tests/test_session.py`：无损往返、`on_message` 次数/顺序、跨实例续聊、残缺历史愈合后 `to_wire` 合法、**第 3 步被 kill 续跑后前 3 步工具不重跑**、坏行跳过不崩
 
-- **判据不是"功能多"，是"出故障时会怎样"。** 四问：进程在第 7 步被杀，状态丢不丢？重跑一次，副作用会不会执行两遍？工具越权了，谁拦的、能不能追到是谁授权的？上下文超了，是静默截断还是有明确降级？
-  —— 和 `验收手册.md` 的反向验收是同一套哲学：happy path 谁都能过，故意弄坏还拦得住才叫有防线。
-- **清单只从这两处取**：`design/分层与边界.md` 的 L2 五格（上下文 / 记忆 / 检索 / 权限 / 并发，现 **0/5**）+ 冻结清单里被解冻的那几格。
-  外部列的功能（多 agent、分布式）**不进这张表** —— 属 L3/L4，已判不做。
-- **预估顺序（按"最便宜且最像生产"排，不是按重要性排）**：
-  ① 状态可序列化 + resume ② 权限 / 能力边界 ③ 上下文管理 ④ 并发 ⑤ 可观测（c 轮已给 80%）。
-  ① 排第一的理由：其余四条都建立在"状态可恢复"之上 —— 状态丢了，权限拦了也没用，上下文压了也没用。
-- **一个待验证的判断（【推断】，没读源码）**：五层模型里没有"状态持久化"这一格，
-  因为 L2 是按"给循环加配件"分的，而持久化不是配件，是**循环本身的可恢复性** ——
-  不是加模块，是改 `RunResult` 的生命周期。
-  **验证法**：假设要 resume 一个跑到第 7 步的 run，数现在缺几样东西；超过三个，这条判断就不成立。
-- **时间边界**：毕设（记忆引擎）与本项目**共用代码可以，共用时间表不行** —— 毕设有 deadline，这个没有。
+#### 第 4 关：两级压缩（一级免费，二级才花钱）
+- [ ] `compact.py`（新，单文件）一级 `shrink_seen`：照 `waku/loop/trim.py`（`LONG_CHARS=4000` / `KEEP_CHARS=2000`），只截 `messages[:-1]`、**只截一次**、不动条数与配对
+- [ ] 二级六段摘要：照 `KamaClaude/core/compact/compactor.py` 的 `_COMPACT_PROMPT`（Original Goal / Completed Steps / Key Constraints / File State / TODOs / Critical Data），压成 `[user(summary), assistant(ack)]` 一对；`Completed Steps` 必须写明已执行的副作用
+- [ ] 挂进 `before_model`；**最后一步（禁工具步）不压**；`EventKind` 新增 `"compact"`；摘要失败不中断任务
+- [ ] `tests/test_compact.py`：未超线返回同一对象、一级保配对且幂等、二级触发、切在「1 拖 3 工具调用」中间也不破配对、摘要抛异常仍继续、端到端 6 个大文件跑通
 
 ---
 
-## 冻结（想动先回一页纸读"不做什么"）
+### M5：README + 面试讲稿（四关收口后）
 
-多 agent · RAG / 向量库 · MCP · TUI · 会话持久化 · 重试 · 上下文压缩 · 流式 · 权限审批 · 插件系统
+> **口径（2026-11-26 更新）**：四关过完后，测试预计从 `67` 涨到 `100+ passed`，
+> L0–L3 全齐。讲稿里的每一句「生产级防线」，都能直接指到 M1–M4 的代码与故障测试。
 
-> M5 的清单主要就从这个清单里**解冻**——解冻的时机是 **M4 之后**，不是 M3 之后。
-> 冻结不是"永远不做"，是"现在做的时机不对"；解冻也不是全解，得按上面那个判据挑。
+- [ ] README 补齐完整架构图、五层对照表与 100+ 测试验证命令
+- [ ] 讲稿：loop vs graph 实测反直觉结论、四道故障防线（权限拦截 / 孤儿恢复 / 保配对压缩 / 死循环熔断）、为什么工具参数用 JSON Schema
+
+---
+
+## 已解冻 vs 仍冻结
+
+- **M4 已解冻**：循环插槽（`should_stop`）· 写工具与权限审批 · 会话持久化与断点恢复 · 上下文压缩
+- **仍冻结（不进 M4）**：多 agent · RAG / 向量库（归毕设） · MCP · TUI · 流式 · 插件系统
 
 ---
 
@@ -178,13 +195,14 @@
 > 所以不正交。现在按**用途**分四类：`docs/` 根目录放"现在要用的"，
 > `design/` 放"还活着的为什么"，`history/` 放"完结的阶段性记录"，其余是资产目录。
 
-### 根目录：现在就要用的（五个）
+### 根目录：现在就要用的（六个）
 
 | 文件 | 角色 |
 | --- | --- |
 | `docs/TODO.md` | **本文件**：唯一清单。开工先看这里 |
+| [M4-任务书.md](M4-任务书.md) | **M4 怎么做**：L2 四关（插槽 / 写工具+权限 / 会话恢复 / 压缩）的切口、不变量与反向验收 |
 | [loop-vs-graph.md](loop-vs-graph.md) | **M3 的产出**：loop / graph 同任务对比 + 为什么不能说"更可预测" |
-| [M3-任务书.md](M3-任务书.md) | **M3 怎么做的**（已完结）：怎么切、检查点、会踩的坑。留作 M4 讲稿素材 |
+| [M3-任务书.md](M3-任务书.md) | **M3 怎么做的**（已完结）：怎么切、检查点、会踩的坑。留作 M5 讲稿素材 |
 | [协作约定.md](协作约定.md) | **怎么提交**：分支（`alma/M<n>` / `Pop/M<n>`）、commit 格式、红线、检查单 |
 | [验收手册.md](验收手册.md) | **怎么验**：跑什么、怎么算过、怎么故意弄坏 |
 
