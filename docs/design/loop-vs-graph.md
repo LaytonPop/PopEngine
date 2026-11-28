@@ -2,7 +2,7 @@
 
 > 写于 2026-11-26。数据来自 `scripts/run_compare.py`，原始账本在 `traces/compare/`
 > （每 run 一份 `.json` 汇总 + 一份 `.events.jsonl`，三个数字可被任何人重算）。
-> **指标定义归 [`design/引擎对比.md`](design/引擎对比.md) §七，本文只引用不重讲。**
+> **指标定义归 [`引擎对比.md`](引擎对比.md) §七，本文只引用不重讲。**
 
 ---
 
